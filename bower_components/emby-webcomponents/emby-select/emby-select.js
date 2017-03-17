@@ -10,7 +10,7 @@
         }
 
         // Doesn't seem to work at all
-        if (browser.tizen) {
+        if (browser.tizen || browser.orsay) {
             return false;
         }
 

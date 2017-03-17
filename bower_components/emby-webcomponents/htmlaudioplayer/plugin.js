@@ -1,4 +1,4 @@
-define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], function (events, browser, pluginManager, appHost, appSettings) {
+define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings', 'itemHelper'], function (events, browser, pluginManager, appHost, appSettings, itemHelper) {
     "use strict";
 
     return function () {
@@ -33,26 +33,50 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
             return (mediaType || '').toLowerCase() === 'audio';
         };
 
-        self.getDeviceProfile = function () {
+        function getDefaultProfile() {
 
             return new Promise(function (resolve, reject) {
 
                 require(['browserdeviceprofile'], function (profileBuilder) {
 
-                    var profile = profileBuilder({
-                    });
-                    resolve(profile);
+                    resolve(profileBuilder({}));
                 });
             });
+        }
+
+        self.getDeviceProfile = function (item) {
+
+            if (appHost.getDeviceProfile) {
+                return appHost.getDeviceProfile(item);
+            }
+
+            return getDefaultProfile();
         };
 
         self.currentSrc = function () {
             return currentSrc;
         };
 
+        function playUwp(options, elem) {
+
+            return Windows.Storage.StorageFile.getFileFromPathAsync(options.url).then(function (file) {
+
+                var playlist = new Windows.Media.Playback.MediaPlaybackList();
+                var source1 = Windows.Media.Core.MediaSource.createFromStorageFile(file);
+                var startTime = (options.playerStartPositionTicks || 0) / 10000;
+                var winJsPlaybackItem = new Windows.Media.Playback.MediaPlaybackItem(source1, startTime);
+                playlist.items.append(winJsPlaybackItem);
+                elem.src = URL.createObjectURL(playlist, { oneTimeOnly: true });
+                currentSrc = elem.src;
+                currentPlayOptions = options;
+                return playWithPromise(elem);
+            });
+        }
+
         self.play = function (options) {
 
             _currentTime = null;
+
             started = false;
             var elem = createMediaElement();
 
@@ -63,7 +87,11 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
                 val += '#t=' + seconds;
             }
 
-            elem.crossOrigin = getCrossOriginValue(options.mediaSource);
+            var crossOrigin = getCrossOriginValue(options.mediaSource);
+            if (crossOrigin) {
+                elem.crossOrigin = crossOrigin;
+            }
+
             elem.title = options.title;
 
             // Opera TV guidelines suggest using source elements, so let's do that if we have a valid mimeType
@@ -77,7 +105,14 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
 
                 elem.innerHTML = '<source src="' + val + '" type="' + options.mimeType + '">';
             } else {
-                elem.src = val;
+
+                if (window.Windows && options.mediaSource && options.mediaSource.IsLocal) {
+
+                    return playUwp(options, elem);
+                } else {
+
+                    elem.src = val;
+                }
             }
 
             currentSrc = val;
@@ -98,7 +133,7 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
                         // safari uses aborterror
                         if (errorName === 'notallowederror' ||
                             errorName === 'aborterror') {
-                            // swallow this error because the user can still click the play button on the video element
+                            // swallow this error because the user can still click the play button on the audio element
                             return Promise.resolve();
                         }
                         return Promise.reject();
@@ -107,12 +142,16 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
                     return Promise.resolve();
                 }
             } catch (err) {
-                console.log('error calling video.play: ' + err);
+                console.log('error calling audio.play: ' + err);
                 return Promise.reject();
             }
         }
 
         function getCrossOriginValue(mediaSource) {
+
+            if (mediaSource.IsRemote) {
+                return null;
+            }
 
             return 'anonymous';
         }
@@ -311,6 +350,7 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
 
             // Get the player position + the transcoding offset
             var time = this.currentTime;
+
             _currentTime = time;
             events.trigger(self, 'timeupdate');
         }
@@ -380,16 +420,27 @@ define(['events', 'browser', 'pluginManager', 'apphost', 'appSettings'], functio
                     break;
                 case 3:
                     // MEDIA_ERR_DECODE
+                    type = 'mediadecodeerror';
                     break;
                 case 4:
                     // MEDIA_ERR_SRC_NOT_SUPPORTED
+                    type = 'medianotsupported';
                     break;
+                default:
+                    // seeing cases where Edge is firing error events with no error code
+                    // example is start playing something, then immediately change src to something else
+                    return;
             }
 
-            //events.trigger(self, 'error', [
-            //{
-            //    type: type
-            //}]);
+            onErrorInternal(type);
+        }
+
+        function onErrorInternal(type) {
+
+            events.trigger(self, 'error', [
+            {
+                type: type
+            }]);
         }
 
         function createMediaElement() {

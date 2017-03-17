@@ -67,7 +67,7 @@
 
                 html += '<button is="emby-button" type="button" class="raised button-submit block btnGetPremiere block formDialogFooterItem" autoFocus><span>' + globalize.translate('sharedcomponents#HeaderBecomeProjectSupporter') + '</span></button>';
 
-                var seconds = 16;
+                var seconds = 11;
 
                 html += '<div class="continueTimeText formDialogFooterItem" style="margin: 1.5em 0 .5em;">' + globalize.translate('sharedcomponents#ContinueInSecondsValue', seconds) + '</div>';
 
@@ -160,7 +160,7 @@
         if (!lastMessage) {
 
             // Don't show on the very first playback attempt
-            appSettings.set(settingsKey, new Date().getTime() - (intervalMs / 2));
+            appSettings.set(settingsKey, new Date().getTime());
             return Promise.resolve();
         }
 

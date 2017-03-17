@@ -11,12 +11,21 @@
 
                 console.log('[mediasync] Begin processDownloadStatus getServerItems completed');
 
+                var p = Promise.resolve();
+                var cnt = 0;
+
+                // Debugging only
+                //items.forEach(function (item) {
+                //    p = p.then(function () {
+                //        return localassetmanager.removeLocalItem(item);
+                //    });
+                //});
+
+                //return Promise.resolve();
+
                 var progressItems = items.filter(function (item) {
                     return item.SyncStatus === 'transferring' || item.SyncStatus === 'queued';
                 });
-
-                var p = Promise.resolve();
-                var cnt = 0;
 
                 progressItems.forEach(function (item) {
                     p = p.then(function () {
@@ -119,8 +128,7 @@
 
             var request = {
                 TargetId: apiClient.deviceId(),
-                LocalItemIds: completedItems.map(function (xitem) { return xitem.ItemId; }),
-                OfflineUserIds: (serverInfo.Users || []).map(function (u) { return u.Id; })
+                LocalItemIds: completedItems.map(function (xitem) { return xitem.ItemId; })
             };
 
             return apiClient.syncData(request).then(function (result) {
@@ -143,7 +151,8 @@
 
         var p = Promise.resolve();
 
-        if (syncDataResult.ItemIdsToRemove) {
+        if (syncDataResult.ItemIdsToRemove && syncDataResult.ItemIdsToRemove.length > 0) {
+
             syncDataResult.ItemIdsToRemove.forEach(function (itemId) {
                 p = p.then(function () {
                     return removeLocalItem(itemId, serverInfo.Id);
@@ -157,10 +166,20 @@
             });
         }
 
+        p = p.then(function () {
+            return removeObsoleteContainerItems(serverInfo.Id);
+        });
+
         return p.then(function () {
             console.log('[mediasync] Exit afterSyncData');
             return Promise.resolve();
         });
+    }
+
+    function removeObsoleteContainerItems(serverId) {
+        console.log('[mediasync] Begin removeObsoleteContainerItems');
+
+        return localassetmanager.removeObsoleteContainerItems(serverId);
     }
 
     function removeLocalItem(itemId, serverId) {
@@ -223,8 +242,12 @@
             libraryItem.CanDownload = false;
             libraryItem.SupportsSync = false;
             libraryItem.People = [];
-            libraryItem.UserData = [];
+            libraryItem.Chapters = [];
+            libraryItem.Studios = [];
+            libraryItem.UserData = {};
             libraryItem.SpecialFeatureCount = null;
+            libraryItem.LocalTrailerCount = null;
+            libraryItem.RemoteTrailers = [];
 
             return localassetmanager.createLocalItem(libraryItem, serverInfo, jobItem).then(function (localItem) {
 
@@ -258,7 +281,7 @@
 
         switch (itemType) {
             case 'episode':
-                if (libraryItem.SeriesId && libraryItem.SeriesId) {
+                if (libraryItem.SeriesId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.SeriesId, serverInfo).then(function (seriesItem) {
                             libraryItem.SeriesLogoImageTag = (seriesItem.Item.ImageTags || {}).Logo;
@@ -266,7 +289,7 @@
                         });
                     });
                 }
-                if (libraryItem.SeasonId && libraryItem.SeasonId) {
+                if (libraryItem.SeasonId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.SeasonId, serverInfo).then(function (seasonItem) {
                             libraryItem.SeasonPrimaryImageTag = (seasonItem.Item.ImageTags || {}).Primary;
@@ -278,7 +301,7 @@
 
             case 'audio':
             case 'photo':
-                if (libraryItem.AlbumId && libraryItem.AlbumId) {
+                if (libraryItem.AlbumId) {
                     p = p.then(function () {
                         return downloadItem(apiClient, libraryItem, libraryItem.AlbumId, serverInfo);
                     });
@@ -319,6 +342,7 @@
             return Promise.resolve(null);
         });
     }
+
 
     function downloadMedia(apiClient, jobItem, localItem, options) {
 
@@ -391,19 +415,19 @@
         }
 
         // Backdrops
-        //if (libraryItem.Id && libraryItem.BackdropImageTags) {
-        //    for (var i = 0; i < libraryItem.BackdropImageTags.length; i++) {
+        if (libraryItem.Id && libraryItem.BackdropImageTags) {
+            for (var i = 0; i < libraryItem.BackdropImageTags.length; i++) {
 
-        //        var backdropImageTag = libraryItem.BackdropImageTags[i];
+                //var backdropImageTag = libraryItem.BackdropImageTags[i];
 
-        //        // use self-invoking function to simulate block-level variable scope
-        //        (function (index, tag) {
-        //            p = p.then(function () {
-        //                return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
-        //            });
-        //        })(i, backdropImageTag);
-        //    }
-        //}
+                //// use self-invoking function to simulate block-level variable scope
+                //(function (index, tag) {
+                //    p = p.then(function () {
+                //        return downloadImage(localItem, apiClient, serverId, libraryItem.Id, tag, 'backdrop', index);
+                //    });
+                //})(i, backdropImageTag);
+            }
+        }
 
         // case 1/2:
         if (libraryItem.SeriesId && libraryItem.SeriesPrimaryImageTag) {
@@ -551,6 +575,44 @@
         });
     }
 
+    function checkLocalFileExistence(apiClient, serverInfo, options) {
+
+        if (options.checkFileExistence) {
+
+            console.log('[mediasync] Begin checkLocalFileExistence');
+
+            return localassetmanager.getServerItems(serverInfo.Id).then(function (items) {
+
+                var completedItems = items.filter(function (item) {
+                    return (item) && ((item.SyncStatus === 'synced') || (item.SyncStatus === 'error'));
+                });
+
+                var p = Promise.resolve();
+
+                completedItems.forEach(function (completedItem) {
+                    p = p.then(function () {
+                        return localassetmanager.fileExists(completedItem.LocalPath).then(function (exists) {
+                            if (!exists) {
+                                return localassetmanager.removeLocalItem(completedItem).then(function () {
+                                    return Promise.resolve();
+                                }, function () {
+                                    return Promise.resolve();
+                                });
+                            }
+
+                            return Promise.resolve();
+                        });
+                    });
+                });
+
+                return p;
+            });
+        }
+
+        return Promise.resolve();
+    }
+
+
     return function () {
 
         var self = this;
@@ -559,26 +621,29 @@
 
             console.log('[mediasync]************************************* Start sync');
 
-            return processDownloadStatus(apiClient, serverInfo, options).then(function () {
+            return checkLocalFileExistence(apiClient, serverInfo, options).then(function () {
 
-                return localassetmanager.getDownloadItemCount().then(function (downloadCount) {
+                return processDownloadStatus(apiClient, serverInfo, options).then(function () {
 
-                    if (options.syncCheckProgressOnly === true && downloadCount > 2) {
-                        return Promise.resolve();
-                    }
+                    return localassetmanager.getDownloadItemCount().then(function (downloadCount) {
 
-                    return reportOfflineActions(apiClient, serverInfo).then(function () {
+                        if (options.syncCheckProgressOnly === true && downloadCount > 2) {
+                            return Promise.resolve();
+                        }
 
-                        // Download new content
-                        return getNewMedia(apiClient, serverInfo, options, downloadCount).then(function () {
+                        return reportOfflineActions(apiClient, serverInfo).then(function () {
 
-                            // Do the second data sync
-                            return syncData(apiClient, serverInfo, false).then(function () {
-                                console.log('[mediasync]************************************* Exit sync');
-                                return Promise.resolve();
+                            // Download new content
+                            return getNewMedia(apiClient, serverInfo, options, downloadCount).then(function () {
+
+                                // Do the second data sync
+                                return syncData(apiClient, serverInfo, false).then(function () {
+                                    console.log('[mediasync]************************************* Exit sync');
+                                    return Promise.resolve();
+                                });
                             });
+                            //});
                         });
-                        //});
                     });
                 });
             }, function (err) {

@@ -10,6 +10,9 @@
     flex-direction: column;
     flex-shrink: 0;
     display: flex;
+    /* Try to give this a min height that will be semi accurate so that the heaeder always takes up a certain amount of space */
+    /* This is needed when setting up the animated virtual scroller, where the frame height is needed before the header contents are set. */
+    min-height: 5.6em;
 }
 
 .guideHeaderDateSelection {
@@ -57,9 +60,7 @@
 .programContainer {
     white-space: nowrap;
     position: relative;
-    display: flex;
     align-items: flex-start;
-    flex-grow: 1;
 }
 
 .channelPrograms {
@@ -96,11 +97,6 @@
     margin-left: .25em;
     transform-origin: left;
     transition: transform 500ms ease-out;
-}
-
-.layout-tv .currentTimeIndicatorBar, .layout-tv .currentTimeIndicatorArrowContainer {
-    /* Need to account for the scrollbar not being there */
-    left: 4px;
 }
 
 .currentTimeIndicatorArrow {
@@ -153,6 +149,7 @@
     /* Needed in firefox */
     text-align: left;
     contain: strict;
+    flex-shrink: 0;
 }
 
 /* Important - have to put the fixed width on channelsContainer, not the individual channelHeaderCell
@@ -265,6 +262,7 @@
     flex-grow: 1;
     margin: 0 !important;
     padding: 0 !important;
+    justify-content: flex-end;
 }
 
 .programAccent {
@@ -302,6 +300,7 @@
     align-items: center;
     /* Need block here or the ellipsis overflow is lost */
     display: block;
+    flex-grow: 1;
 }
 
 .guideProgramNameText {
@@ -319,13 +318,13 @@
 }
 
 .programIcon {
-    margin-left: auto;
     margin-right: .25em;
     height: 1em;
     width: 1em;
     font-size: 1.6em;
     color: #ddd;
     flex-shrink: 0;
+    flex-grow: 0;
 }
 
     .programIcon + .programIcon {
@@ -456,8 +455,9 @@
         opacity: 1;
     }
 
-.layout-tv .guide-date-tab-button:focus {
-    background-color: #52B54B !important;
-    border-radius: .15em !important;
-    color: #fff !important;
-}
+    .guide-date-tab-button.emby-button-tv:focus {
+        background-color: #52B54B !important;
+        border-radius: .15em !important;
+        color: #fff !important;
+        transform: none !important;
+    }

@@ -83,6 +83,10 @@
             return self.serverInfo().Id;
         };
 
+        self.serverName = function () {
+            return self.serverInfo().Name;
+        };
+
         var currentUser;
         /**
          * Gets or sets the current user id.
@@ -451,7 +455,7 @@
                 if (error) {
                     console.log("Request failed to " + request.url + ' ' + error.toString());
                 } else {
-                    console.log("Request timed out to " + request.url + ' ' + error.toString());
+                    console.log("Request timed out to " + request.url);
                 }
 
                 // http://api.jquery.com/jQuery.ajax/		     
@@ -1408,7 +1412,7 @@
             return self.getJSON(url);
         };
 
-        self.getPlaybackInfo = function(itemId, options, deviceProfile) {
+        self.getPlaybackInfo = function (itemId, options, deviceProfile) {
 
             var postData = {
                 DeviceProfile: deviceProfile
@@ -1423,7 +1427,7 @@
             });
         };
 
-        self.getIntros = function(itemId) {
+        self.getIntros = function (itemId) {
 
             return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/' + itemId + '/Intros'));
         };
@@ -2308,21 +2312,6 @@
             }
 
             var url = self.getUrl("Users/" + id);
-
-            return self.getJSON(url);
-        };
-
-        /**
-         * Gets a user by id
-         * @param {String} id
-         */
-        self.getOfflineUser = function (id) {
-
-            if (!id) {
-                throw new Error("Must supply a userId");
-            }
-
-            var url = self.getUrl("Users/" + id + "/Offline");
 
             return self.getJSON(url);
         };
@@ -3730,6 +3719,12 @@
                 url: self.getUrl('Auth/Pin', queryString),
                 dataType: 'json'
             });
+        };
+
+        self.getLatestItems = function (options) {
+
+            options = options || {};
+            return self.getJSON(self.getUrl('Users/' + self.getCurrentUserId() + '/Items/Latest', options));
         };
 
         function exchangePin(pinInfo) {

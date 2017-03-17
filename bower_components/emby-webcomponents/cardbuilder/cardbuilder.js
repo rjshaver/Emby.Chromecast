@@ -1,4 +1,4 @@
-define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusManager', 'indicators', 'globalize', 'layoutManager', 'apphost', 'dom', 'browser', 'emby-button', 'css!./card', 'paper-icon-button-light', 'clearButtonStyle'],
+define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusManager', 'indicators', 'globalize', 'layoutManager', 'apphost', 'dom', 'browser', 'css!./card', 'paper-icon-button-light', 'clearButtonStyle'],
     function (datetime, imageLoader, connectionManager, itemHelper, focusManager, indicators, globalize, layoutManager, appHost, dom, browser) {
         'use strict';
 
@@ -242,10 +242,10 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     options.width = options.width || 500;
                 }
                 else if (options.shape === 'portrait') {
-                    options.width = options.width || 243;
+                    options.width = options.width || 256;
                 }
                 else if (options.shape === 'square') {
-                    options.width = options.width || 243;
+                    options.width = options.width || 256;
                 }
                 else if (options.shape === 'banner') {
                     options.width = options.width || 800;
@@ -268,10 +268,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
             }
 
             setCardData(items, options);
-
-            if (options.indexBy === 'Genres') {
-                return buildCardsByGenreHtmlInternal(items, options);
-            }
 
             var className = 'card';
 
@@ -316,10 +312,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                             } catch (err) {
                             }
                         }
-                    }
-
-                    else if (options.indexBy === 'Genres') {
-                        newIndexValue = item.Name;
                     }
 
                     else if (options.indexBy === 'ProductionYear') {
@@ -395,100 +387,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                 if (isVertical) {
                     html += '</div>';
                 }
-            }
-
-            return html;
-        }
-
-        function filterItemsByGenre(items, genre) {
-
-            var genreLower = genre.toLowerCase();
-            return items.filter(function (currentItem) {
-
-                return currentItem.Genres.filter(function (g) {
-
-                    return g.toLowerCase() === genreLower;
-
-                }).length > 0;
-            });
-        }
-
-        function buildCardsByGenreHtmlInternal(items, options) {
-
-            var className = 'card';
-
-            if (options.shape) {
-                className += ' ' + options.shape + 'Card';
-            }
-
-            var html = '';
-
-            var loopItems = options.genres;
-
-            var itemsInRow;
-            var hasOpenRow;
-
-            var onGenre = function (renderItem) {
-
-                var currentItemHtml = '';
-
-                if (options.rows && itemsInRow === 0) {
-
-                    if (hasOpenRow) {
-                        currentItemHtml += '</div>';
-                        hasOpenRow = false;
-                    }
-
-                    currentItemHtml += '<div class="cardColumn">';
-                    hasOpenRow = true;
-                }
-
-                var cardClass = className;
-                currentItemHtml += buildCard(i, renderItem, connectionManager.getApiClient(renderItem.ServerId || options.serverId), options, cardClass);
-
-                itemsInRow++;
-
-                if (options.rows && itemsInRow >= options.rows) {
-                    currentItemHtml += '</div>';
-                    hasOpenRow = false;
-                    itemsInRow = 0;
-                }
-
-                return currentItemHtml;
-            };
-
-            for (var i = 0, length = loopItems.length; i < length; i++) {
-
-                var item = loopItems[i];
-
-                var renderItems = filterItemsByGenre(items, item.Name);
-
-                if (!renderItems.length) {
-                    continue;
-                }
-
-                html += '<div class="horizontalSection focuscontainer-down">';
-                html += '<div class="sectionTitle">' + item.Name + '</div>';
-
-                var showMoreButton = false;
-                if (renderItems.length > options.indexLimit) {
-                    renderItems.length = Math.min(renderItems.length, options.indexLimit);
-                    showMoreButton = true;
-                }
-
-                itemsInRow = 0;
-                hasOpenRow = false;
-
-                html += renderItems.map(onGenre).join('');
-
-                if (showMoreButton) {
-                    html += '<div class="listItemsMoreButtonContainer">';
-                    html += '<button is="emby-button" class="listItemsMoreButton raised" data-parentid="' + options.parentId + '" data-indextype="Genres" data-indexvalue="' + item.Id + '">' + globalize.translate('sharedcomponents#More') + '</button>';
-                    html += '</div>';
-                }
-
-                html += '</div>';
-                html += '</div>';
             }
 
             return html;
@@ -792,6 +690,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
 
                         lines.push(getTextActionButton({
                             Id: item.SeriesId,
+                            ServerId: item.ServerId,
                             Name: item.SeriesName,
                             Type: 'Series',
                             IsFolder: true
@@ -808,7 +707,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                             }
 
                         } else {
-                            var parentTitle = item.SeriesName || item.Album || item.AlbumArtist || item.GameSystem || "";
+                            var parentTitle = item.SeriesName || item.Series || item.Album || item.AlbumArtist || item.GameSystem || "";
 
                             if (parentTitle || showTitle) {
                                 lines.push(parentTitle);
@@ -838,9 +737,9 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     if (isOuterFooter && item.AlbumArtists && item.AlbumArtists.length) {
                         item.AlbumArtists[0].Type = 'MusicArtist';
                         item.AlbumArtists[0].IsFolder = true;
-                        lines.push(getTextActionButton(item.AlbumArtists[0]));
+                        lines.push(getTextActionButton(item.AlbumArtists[0], null, item.ServerId));
                     } else {
-                        lines.push(isUsingLiveTvNaming(item) ? item.Name : (item.SeriesName || item.Album || item.AlbumArtist || item.GameSystem || ""));
+                        lines.push(isUsingLiveTvNaming(item) ? item.Name : (item.SeriesName || item.Series || item.Album || item.AlbumArtist || item.GameSystem || ""));
                     }
                 }
 
@@ -887,9 +786,24 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     }
                 }
 
-                if (options.showYear) {
+                if (options.showYear || options.showSeriesYear) {
 
-                    lines.push(item.ProductionYear || '');
+                    if (item.Type === 'Series') {
+                        if (item.Status === "Continuing") {
+
+                            lines.push(globalize.translate('sharedcomponents#SeriesYearToPresent', item.ProductionYear || ''));
+
+                        } else {
+
+                            if (item.EndDate && item.ProductionYear) {
+                                lines.push(item.ProductionYear + ' - ' + datetime.parseISO8601Date(item.EndDate).getFullYear());
+                            } else {
+                                lines.push(item.ProductionYear || '');
+                            }
+                        }
+                    } else {
+                        lines.push(item.ProductionYear || '');
+                    }
                 }
 
                 if (options.showRuntime) {
@@ -949,6 +863,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                         lines.push(getTextActionButton({
 
                             Id: item.ChannelId,
+                            ServerId: item.ServerId,
                             Name: item.ChannelName,
                             Type: 'TvChannel',
                             MediaType: item.MediaType,
@@ -967,23 +882,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     } else {
                         lines.push('');
                     }
-                }
-
-                if (options.showSeriesYear) {
-
-                    if (item.Status === "Continuing") {
-
-                        lines.push(globalize.translate('sharedcomponents#SeriesYearToPresent', item.ProductionYear || ''));
-
-                    } else {
-
-                        if (item.EndDate && item.ProductionYear) {
-                            lines.push(item.ProductionYear + ' - ' + datetime.parseISO8601Date(item.EndDate).getFullYear());
-                        } else {
-                            lines.push(item.ProductionYear || '');
-                        }
-                    }
-
                 }
 
                 if (options.showSeriesTimerTime) {
@@ -1020,7 +918,9 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                 lines = [];
             }
 
-            html += getCardTextLines(lines, cssClass, !options.overlayText, isOuterFooter, options.cardLayout, isOuterFooter && options.cardLayout && !options.centerText, options.lines);
+            var addRightTextMargin = isOuterFooter && options.cardLayout && !options.centerText && options.cardFooterAside !== 'none' && !layoutManager.tv;
+
+            html += getCardTextLines(lines, cssClass, !options.overlayText, isOuterFooter, options.cardLayout, addRightTextMargin, options.lines);
 
             if (progressHtml) {
                 html += progressHtml;
@@ -1047,13 +947,17 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
             return html;
         }
 
-        function getTextActionButton(item, text) {
+        function getTextActionButton(item, text, serverId) {
 
             if (!text) {
                 text = itemHelper.getDisplayName(item);
             }
 
-            var html = '<button data-id="' + item.Id + '" data-type="' + item.Type + '" data-mediatype="' + item.MediaType + '" data-channelid="' + item.ChannelId + '" data-isfolder="' + item.IsFolder + '" type="button" class="itemAction textActionButton" data-action="link">';
+            if (layoutManager.tv) {
+                return text;
+            }
+
+            var html = '<button data-id="' + item.Id + '" data-serverid="' + (serverId || item.ServerId) + '" data-type="' + item.Type + '" data-mediatype="' + item.MediaType + '" data-channelid="' + item.ChannelId + '" data-isfolder="' + item.IsFolder + '" type="button" class="itemAction textActionButton" data-action="link">';
             html += text;
             html += '</button>';
 
@@ -1070,9 +974,9 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
 
                 childText = '';
 
-                if (item.CumulativeRunTimeTicks) {
+                if (item.RunTimeTicks) {
 
-                    var minutes = item.CumulativeRunTimeTicks / 600000000;
+                    var minutes = item.RunTimeTicks / 600000000;
 
                     minutes = minutes || 1;
 
@@ -1214,6 +1118,10 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
 
             if (layoutManager.tv) {
                 cardBoxClass += ' cardBox-focustransform';
+
+                if (options.cardLayout || !separateCardBox) {
+                    cardBoxClass += ' card-focuscontent';
+                }
             }
 
             var footerCssClass;
@@ -1249,7 +1157,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
 
             var outerCardFooter = '';
             if (!overlayText && !footerOverlayed) {
-                footerCssClass = options.cardLayout ? 'cardFooter visualCardBox-cardFooter' : 'cardFooter transparent';
+                footerCssClass = options.cardLayout ? 'cardFooter' : 'cardFooter transparent';
                 outerCardFooter = getCardFooterText(item, apiClient, options, showTitle, forceName, overlayText, imgUrl, footerCssClass, progressHtml, true, cardFooterId, vibrantSwatch);
             }
 
@@ -1270,7 +1178,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     overlayPlayButton = item.MediaType === 'Video';
                 }
 
-                if (overlayPlayButton && !item.IsPlaceHolder && (item.LocationType !== 'Virtual' || !item.MediaType || item.Type === 'Program') && item.Type !== 'Person' && item.PlayAccess === 'Full') {
+                if (overlayPlayButton && !item.IsPlaceHolder && (item.LocationType !== 'Virtual' || !item.MediaType || item.Type === 'Program') && item.Type !== 'Person') {
                     overlayButtons += '<button is="paper-icon-button-light" class="cardOverlayButton itemAction autoSize" data-action="play" onclick="return false;"><i class="md-icon">play_arrow</i></button>';
                 }
                 if (options.overlayMoreButton) {
@@ -1325,7 +1233,11 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
                     cardImageContainerOpen = imgUrl ? ('<div class="' + cardImageContainerClass + ' lazy"' + vibrantAttributes + ' data-src="' + imgUrl + '">') : ('<div class="' + cardImageContainerClass + '">');
                 }
 
-                var cardScalableClass = options.cardLayout ? 'cardScalable visualCardBox-cardScalable' : 'cardScalable';
+                var cardScalableClass = 'cardScalable';
+
+                if (layoutManager.tv && !options.cardLayout) {
+                    cardScalableClass += ' card-focuscontent';
+                }
                 cardImageContainerOpen = '<div class="' + cardBoxClass + '"><div class="' + cardScalableClass + '"><div class="cardPadder-' + options.shape + '"></div>' + cardContentOpen + cardImageContainerOpen;
                 cardBoxClose = '</div>';
                 cardScalableClose = '</div>';
@@ -1370,7 +1282,8 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
 
             var tagName = (layoutManager.tv || !scalable) && !overlayButtons ? 'button' : 'div';
 
-            var prefix = (item.SortName || item.Name || '')[0];
+            var nameWithPrefix = (item.SortName || item.Name || '');
+            var prefix = nameWithPrefix.substring(0, Math.min(3, nameWithPrefix.length));
 
             if (prefix) {
                 prefix = prefix.toUpperCase();
@@ -1404,8 +1317,9 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
             var collectionTypeData = item.CollectionType ? (' data-collectiontype="' + item.CollectionType + '"') : '';
             var channelIdData = item.ChannelId ? (' data-channelid="' + item.ChannelId + '"') : '';
             var contextData = options.context ? (' data-context="' + options.context + '"') : '';
+            var parentIdData = options.parentId ? (' data-parentid="' + options.parentId + '"') : '';
 
-            return '<' + tagName + ' data-index="' + index + '"' + timerAttributes + actionAttribute + ' data-isfolder="' + (item.IsFolder || false) + '" data-serverid="' + (item.ServerId || options.serverId) + '" data-id="' + (item.Id || item.ItemId) + '" data-type="' + item.Type + '"' + mediaTypeData + collectionTypeData + channelIdData + positionTicksData + collectionIdData + playlistIdData + contextData + ' data-prefix="' + prefix + '" class="' + className + '">' + cardImageContainerOpen + innerCardFooter + cardImageContainerClose + cardContentClose + overlayButtons + cardScalableClose + outerCardFooter + cardBoxClose + '</' + tagName + '>';
+            return '<' + tagName + ' data-index="' + index + '"' + timerAttributes + actionAttribute + ' data-isfolder="' + (item.IsFolder || false) + '" data-serverid="' + (item.ServerId || options.serverId) + '" data-id="' + (item.Id || item.ItemId) + '" data-type="' + item.Type + '"' + mediaTypeData + collectionTypeData + channelIdData + positionTicksData + collectionIdData + playlistIdData + contextData + parentIdData + ' data-prefix="' + prefix + '" class="' + className + '">' + cardImageContainerOpen + innerCardFooter + cardImageContainerClose + cardContentClose + overlayButtons + cardScalableClose + outerCardFooter + cardBoxClose + '</' + tagName + '>';
         }
 
         function buildCards(items, options) {
@@ -1448,10 +1362,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
             if (options.autoFocus) {
                 focusManager.autoFocus(options.itemsContainer, true);
             }
-
-            if (options.indexBy === 'Genres') {
-                options.itemsContainer.addEventListener('click', onItemsContainerClick);
-            }
         }
 
         function parentWithClass(elem, className) {
@@ -1465,24 +1375,6 @@ define(['datetime', 'imageLoader', 'connectionManager', 'itemHelper', 'focusMana
             }
 
             return elem;
-        }
-
-        function onItemsContainerClick(e) {
-
-            var listItemsMoreButton = parentWithClass(e.target, 'listItemsMoreButton');
-
-            if (listItemsMoreButton) {
-
-                var value = listItemsMoreButton.getAttribute('data-indexvalue');
-                var parentid = listItemsMoreButton.getAttribute('data-parentid');
-
-                require(['embyRouter'], function (embyRouter) {
-                    embyRouter.showGenre({
-                        ParentId: parentid,
-                        Id: value
-                    });
-                });
-            }
         }
 
         function ensureIndicators(card, indicatorsElem) {

@@ -25,7 +25,7 @@ define(['dom'], function (dom) {
         }
 
         if (defaultToFirst !== false) {
-            element = getFocusableElements(view, 1)[0];
+            element = getFocusableElements(view, 1, 'noautofocus')[0];
 
             if (element) {
                 focus(element);
@@ -118,13 +118,17 @@ define(['dom'], function (dom) {
         return scopes[0] || document.body;
     }
 
-    function getFocusableElements(parent, limit) {
+    function getFocusableElements(parent, limit, excludeClass) {
         var elems = (parent || getDefaultScope()).querySelectorAll(focusableQuery);
         var focusableElements = [];
 
         for (var i = 0, length = elems.length; i < length; i++) {
 
             var elem = elems[i];
+
+            if (excludeClass && elem.classList.contains(excludeClass)) {
+                continue;
+            }
 
             if (isCurrentlyFocusableInternal(elem)) {
                 focusableElements.push(elem);
@@ -143,17 +147,39 @@ define(['dom'], function (dom) {
         if (focusableContainerTagNames.indexOf(elem.tagName) !== -1) {
             return true;
         }
-        if (elem.classList.contains('focuscontainer')) {
+
+        var classList = elem.classList;
+
+        if (classList.contains('focuscontainer')) {
             return true;
         }
 
-        if (direction < 2) {
-            if (elem.classList.contains('focuscontainer-x')) {
+        if (direction === 0) {
+            if (classList.contains('focuscontainer-x')) {
+                return true;
+            }
+            if (classList.contains('focuscontainer-left')) {
+                return true;
+            }
+        }
+        else if (direction === 1) {
+            if (classList.contains('focuscontainer-x')) {
+                return true;
+            }
+            if (classList.contains('focuscontainer-right')) {
+                return true;
+            }
+        }
+        else if (direction === 2) {
+            if (classList.contains('focuscontainer-y')) {
                 return true;
             }
         }
         else if (direction === 3) {
-            if (elem.classList.contains('focuscontainer-down')) {
+            if (classList.contains('focuscontainer-y')) {
+                return true;
+            }
+            if (classList.contains('focuscontainer-down')) {
                 return true;
             }
         }
@@ -189,22 +215,24 @@ define(['dom'], function (dom) {
                 height: 0
             };
         }
-        return {
-            top: box.top,
-            left: box.left,
-            width: box.width,
-            height: box.height
-        };
-    }
 
-    function getViewportBoundingClientRect(elem) {
+        if (box.right === null) {
 
-        var offset = getOffset(elem);
+            // Create a new object because some browsers will throw an error when trying to set data onto the Rect object
+            var newBox = {
+                top: box.top,
+                left: box.left,
+                width: box.width,
+                height: box.height
+            };
 
-        offset.right = offset.left + offset.width;
-        offset.bottom = offset.top + offset.height;
+            box = newBox;
 
-        return offset;
+            box.right = box.left + box.width;
+            box.bottom = box.top + box.height;
+        }
+
+        return box;
     }
 
     function nav(activeElement, direction) {
@@ -224,10 +252,28 @@ define(['dom'], function (dom) {
 
         var focusableContainer = dom.parentWithClass(activeElement, 'focusable');
 
-        var rect = getViewportBoundingClientRect(activeElement);
+        var rect = getOffset(activeElement);
         var focusableElements = [];
 
+        // Get elements and work out x/y points
+        var cache = [],
+			point1x = parseFloat(rect.left) || 0,
+			point1y = parseFloat(rect.top) || 0,
+			point2x = parseFloat(point1x + rect.width - 1) || point1x,
+			point2y = parseFloat(point1y + rect.height - 1) || point1y,
+			// Shortcuts to help with compression
+			min = Math.min,
+			max = Math.max;
+
+        var sourceMidX = rect.left + (rect.width / 2);
+        var sourceMidY = rect.top + (rect.height / 2);
+
         var focusable = container.querySelectorAll(focusableQuery);
+
+        var maxDistance = Infinity;
+        var minDistance = maxDistance;
+        var nearestElement;
+
         for (var i = 0, length = focusable.length; i < length; i++) {
             var curr = focusable[i];
 
@@ -243,7 +289,7 @@ define(['dom'], function (dom) {
             //    continue;
             //}
 
-            var elementRect = getViewportBoundingClientRect(curr);
+            var elementRect = getOffset(curr);
 
             // not currently visible
             if (!elementRect.width && !elementRect.height) {
@@ -291,73 +337,17 @@ define(['dom'], function (dom) {
                 default:
                     break;
             }
-            focusableElements.push({
-                element: curr,
-                clientRect: elementRect
-            });
-        }
 
-        var nearest = getNearestElements(focusableElements, rect, direction);
-
-        if (nearest.length) {
-
-            var nearestElement = nearest[0].node;
-
-            // See if there's a focusable container, and if so, send the focus command to that
-            if (activeElement) {
-                var nearestElementFocusableParent = dom.parentWithClass(nearestElement, 'focusable');
-                if (nearestElementFocusableParent && nearestElementFocusableParent !== nearestElement) {
-                    if (focusableContainer !== nearestElementFocusableParent) {
-                        nearestElement = nearestElementFocusableParent;
-                    }
-                }
-            }
-            focus(nearestElement);
-        }
-    }
-
-    function intersectsInternal(a1, a2, b1, b2) {
-
-        return (b1 >= a1 && b1 <= a2) || (b2 >= a1 && b2 <= a2);
-    }
-
-    function intersects(a1, a2, b1, b2) {
-
-        return intersectsInternal(a1, a2, b1, b2) || intersectsInternal(b1, b2, a1, a2);
-    }
-
-    function getNearestElements(elementInfos, options, direction) {
-
-        // Get elements and work out x/y points
-        var cache = [],
-			point1x = parseFloat(options.left) || 0,
-			point1y = parseFloat(options.top) || 0,
-			point2x = parseFloat(point1x + options.width - 1) || point1x,
-			point2y = parseFloat(point1y + options.height - 1) || point1y,
-			// Shortcuts to help with compression
-			min = Math.min,
-			max = Math.max;
-
-        var sourceMidX = options.left + (options.width / 2);
-        var sourceMidY = options.top + (options.height / 2);
-
-        // Loop through all elements and check their positions
-        for (var i = 0, length = elementInfos.length; i < length; i++) {
-
-            var elementInfo = elementInfos[i];
-            var elem = elementInfo.element;
-
-            var off = elementInfo.clientRect,
-                x = off.left,
-                y = off.top,
-                x2 = x + off.width - 1,
-                y2 = y + off.height - 1;
+            var x = elementRect.left,
+                y = elementRect.top,
+                x2 = x + elementRect.width - 1,
+                y2 = y + elementRect.height - 1;
 
             var intersectX = intersects(point1x, point2x, x, x2);
             var intersectY = intersects(point1y, point2y, y, y2);
 
-            var midX = off.left + (off.width / 2);
-            var midY = off.top + (off.height / 2);
+            var midX = elementRect.left + (elementRect.width / 2);
+            var midY = elementRect.top + (elementRect.height / 2);
 
             var distX;
             var distY;
@@ -388,41 +378,114 @@ define(['dom'], function (dom) {
                     break;
             }
 
-            var distT = Math.sqrt(distX * distX + distY * distY);
+            var dist = Math.sqrt(distX * distX + distY * distY);
 
-            cache.push({
-                node: elem,
-                distX: distX,
-                distY: distY,
-                distT: distT,
-                index: i
-            });
+            if (dist < minDistance) {
+                nearestElement = curr;
+                minDistance = dist;
+            }
         }
 
-        cache.sort(sortNodesT);
+        if (nearestElement) {
 
-        return cache;
+            // See if there's a focusable container, and if so, send the focus command to that
+            if (activeElement) {
+                var nearestElementFocusableParent = dom.parentWithClass(nearestElement, 'focusable');
+                if (nearestElementFocusableParent && nearestElementFocusableParent !== nearestElement) {
+                    if (focusableContainer !== nearestElementFocusableParent) {
+                        nearestElement = nearestElementFocusableParent;
+                    }
+                }
+            }
+            focus(nearestElement);
+        }
     }
 
-    function sortNodesT(a, b) {
+    function intersectsInternal(a1, a2, b1, b2) {
 
-        var result = a.distT - b.distT;
-        if (result !== 0) {
-            return result;
-        }
+        return (b1 >= a1 && b1 <= a2) || (b2 >= a1 && b2 <= a2);
+    }
 
-        result = a.index - b.index;
-        if (result !== 0) {
-            return result;
-        }
+    function intersects(a1, a2, b1, b2) {
 
-        return 0;
+        return intersectsInternal(a1, a2, b1, b2) || intersectsInternal(b1, b2, a1, a2);
     }
 
     function sendText(text) {
         var elem = document.activeElement;
 
         elem.value = text;
+    }
+
+    function focusFirst(container, focusableSelector) {
+
+        var elems = container.querySelectorAll(focusableSelector);
+
+        for (var i = 0, length = elems.length; i < length; i++) {
+
+            var elem = elems[i];
+
+            if (isCurrentlyFocusableInternal(elem)) {
+                focus(elem);
+                break;
+            }
+        }
+    }
+
+    function focusLast(container, focusableSelector) {
+
+        var elems = [].slice.call(container.querySelectorAll(focusableSelector), 0).reverse();
+
+        for (var i = 0, length = elems.length; i < length; i++) {
+
+            var elem = elems[i];
+
+            if (isCurrentlyFocusableInternal(elem)) {
+                focus(elem);
+                break;
+            }
+        }
+    }
+
+    function moveFocus(sourceElement, container, focusableSelector, offset) {
+
+        var elems = container.querySelectorAll(focusableSelector);
+        var list = [];
+        var i, length, elem;
+
+        for (i = 0, length = elems.length; i < length; i++) {
+
+            elem = elems[i];
+
+            if (isCurrentlyFocusableInternal(elem)) {
+                list.push(elem);
+            }
+        }
+
+        var currentIndex = -1;
+
+        for (i = 0, length = list.length; i < length; i++) {
+
+            elem = list[i];
+
+            if (sourceElement === elem || elem.contains(sourceElement)) {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        if (currentIndex === -1) {
+            return;
+        }
+
+        var newIndex = currentIndex + offset;
+        newIndex = Math.max(0, newIndex);
+        newIndex = Math.min(newIndex, list.length - 1);
+
+        var newElem = list[newIndex];
+        if (newElem) {
+            focus(newElem);
+        }
     }
 
     return {
@@ -445,6 +508,9 @@ define(['dom'], function (dom) {
         sendText: sendText,
         isCurrentlyFocusable: isCurrentlyFocusable,
         pushScope: pushScope,
-        popScope: popScope
+        popScope: popScope,
+        focusFirst: focusFirst,
+        focusLast: focusLast,
+        moveFocus: moveFocus
     };
 });

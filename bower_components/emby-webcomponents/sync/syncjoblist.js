@@ -69,7 +69,12 @@ globalize.translate('sharedcomponents#CancelSyncJobConfirmation');
 
         if (job.Status === 'Transferring' || job.Status === 'Converting' || job.Status === 'Completed') {
             html += ' ';
-            html += (job.Progress || 0) + '%';
+
+            var progress = job.Progress || 0;
+            if (progress > 0 && progress < 100) {
+                progress = progress.toFixed(1);
+            }
+            html += progress + '%';
         }
 
         return html;
@@ -82,10 +87,12 @@ globalize.translate('sharedcomponents#CancelSyncJobConfirmation');
         var tagName = layoutManager.tv ? 'button' : 'div';
         var typeAttribute = tagName === 'button' ? ' type="button"' : '';
 
-        var listItemClass = 'listItem';
+        var listItemClass = 'listItem listItem-shaded';
 
         if (layoutManager.tv) {
             listItemClass += ' listItem-button listItem-focusscale';
+
+            listItemClass += ' btnJobMenu';
         }
 
         html += '<' + tagName + typeAttribute + ' class="' + listItemClass + '" data-id="' + job.Id + '" data-status="' + job.Status + '">';
@@ -112,14 +119,16 @@ globalize.translate('sharedcomponents#CancelSyncJobConfirmation');
 
         var textLines = [];
 
+        var name = job.Name;
+
         if (job.ParentName) {
-            textLines.push(job.ParentName);
+            name += ' - ' + job.ParentName;
         }
 
-        textLines.push(job.Name);
+        textLines.push(name);
 
         if (job.ItemCount === 1) {
-            textLines.push(globalize.translate('sharedcomponents#ValueOneItem'));
+            //textLines.push(globalize.translate('sharedcomponents#ValueOneItem'));
         } else {
             textLines.push(globalize.translate('sharedcomponents#ItemCount', job.ItemCount));
         }
@@ -288,6 +297,12 @@ globalize.translate('sharedcomponents#CancelSyncJobConfirmation');
                 id: 'delete'
             });
         } else {
+
+            menuItems.push({
+                name: globalize.translate('sharedcomponents#Edit'),
+                id: 'edit'
+            });
+
             var txt = listInstance.options.isLocalSync ?
 globalize.translate('sharedcomponents#RemoveDownload') :
 globalize.translate('sharedcomponents#ButtonCancelSyncJob');
@@ -313,6 +328,9 @@ globalize.translate('sharedcomponents#ButtonCancelSyncJob');
                         case 'cancel':
                             cancelJob(listInstance, jobId);
                             break;
+                        case 'edit':
+                            showJobEditor(listInstance, elem);
+                            break;
                         default:
                             break;
                     }
@@ -332,7 +350,11 @@ globalize.translate('sharedcomponents#ButtonCancelSyncJob');
             return;
         }
 
-        var listItem = dom.parentWithClass(e.target, 'listItem');
+        showJobEditor(listInstance, e.target);
+    }
+
+    function showJobEditor(listInstance, elem) {
+        var listItem = dom.parentWithClass(elem, 'listItem');
         if (listItem) {
             var jobId = listItem.getAttribute('data-id');
             // edit job

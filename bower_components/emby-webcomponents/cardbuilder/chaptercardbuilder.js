@@ -1,9 +1,13 @@
-define(['datetime', 'imageLoader', 'connectionManager', 'layoutManager'], function (datetime, imageLoader, connectionManager, layoutManager) {
+define(['datetime', 'imageLoader', 'connectionManager', 'layoutManager', 'browser'], function (datetime, imageLoader, connectionManager, layoutManager, browser) {
     'use strict';
 
     function buildChapterCardsHtml(item, chapters, options) {
 
         var className = 'card scalableCard itemAction chapterCard';
+
+        if (layoutManager.tv && (browser.animate || browser.edge)) {
+            className += ' card-focusscale';
+        }
 
         var mediaStreams = ((item.MediaSources || [])[0] || {}).MediaStreams || [];
         var videoStream = mediaStreams.filter(function (i) {
@@ -14,7 +18,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'layoutManager'], functi
 
         if (videoStream.Width && videoStream.Height) {
 
-            if ((videoStream.Width / videoStream.Height) <= 1.34) {
+            if ((videoStream.Width / videoStream.Height) <= 1.2) {
                 shape = (options.squareShape || 'square');
             }
         }
@@ -89,7 +93,7 @@ define(['datetime', 'imageLoader', 'connectionManager', 'layoutManager'], functi
         var cardBoxCssClass = 'cardBox';
 
         if (layoutManager.tv) {
-            cardBoxCssClass += ' cardBox-focustransform';
+            cardBoxCssClass += ' cardBox-focustransform card-focuscontent';
         }
 
         var html = '<button type="button" class="' + className + '"' + dataAttributes + '><div class="' + cardBoxCssClass + '"><div class="cardScalable"><div class="cardPadder-' + shape + '"></div><div class="cardContent">' + cardImageContainer + '</div><div class="innerCardFooter">' + nameHtml + '</div></div></div></div></button>';

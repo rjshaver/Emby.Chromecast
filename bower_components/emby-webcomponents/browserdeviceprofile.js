@@ -8,7 +8,7 @@ define(['browser'], function (browser) {
 
     function canPlayH265() {
 
-        if (browser.tizen) {
+        if (browser.tizen || browser.orsay) {
             return true;
         }
 
@@ -17,6 +17,10 @@ define(['browser'], function (browser) {
 
     var _supportsTextTracks;
     function supportsTextTracks() {
+
+        if (browser.tizen || browser.orsay) {
+            return true;
+        }
 
         if (_supportsTextTracks == null) {
             _supportsTextTracks = document.createElement('video').textTracks != null;
@@ -36,8 +40,12 @@ define(['browser'], function (browser) {
     }
 
     function canPlayNativeHls() {
-        var media = document.createElement('video');
 
+        if (browser.tizen || browser.orsay) {
+            return true;
+        }
+
+        var media = document.createElement('video');
         if (media.canPlayType('application/x-mpegURL').replace(/no/, '') ||
             media.canPlayType('application/vnd.apple.mpegURL').replace(/no/, '')) {
             return true;
@@ -60,7 +68,7 @@ define(['browser'], function (browser) {
         var typeString;
 
         if (format === 'flac') {
-            if (browser.tizen) {
+            if (browser.tizen || browser.orsay) {
                 return true;
             }
             if (browser.edgeUwp) {
@@ -69,7 +77,7 @@ define(['browser'], function (browser) {
         }
 
         else if (format === 'wma') {
-            if (browser.tizen) {
+            if (browser.tizen || browser.orsay) {
                 return true;
             }
             if (browser.edgeUwp) {
@@ -102,6 +110,10 @@ define(['browser'], function (browser) {
 
     function testCanPlayMkv(videoTestElement) {
 
+        if (browser.tizen || browser.orsay) {
+            return true;
+        }
+
         if (videoTestElement.canPlayType('video/x-matroska') ||
             videoTestElement.canPlayType('video/mkv')) {
             return true;
@@ -125,10 +137,6 @@ define(['browser'], function (browser) {
             return true;
         }
 
-        if (browser.tizen) {
-            return true;
-        }
-
         if (browser.edgeUwp) {
 
             return true;
@@ -138,8 +146,15 @@ define(['browser'], function (browser) {
     }
 
     function testCanPlayTs() {
+        return browser.tizen || browser.orsay || browser.web0s || browser.edgeUwp;
+    }
 
-        return browser.tizen || browser.web0s || browser.edgeUwp;
+    function supportsMpeg2Video() {
+        return browser.orsay || browser.tizen || browser.edgeUwp;
+    }
+
+    function supportsVc1() {
+        return browser.orsay || browser.tizen || browser.edgeUwp;
     }
 
     function getDirectPlayProfileForVideoContainer(container, videoAudioCodecs) {
@@ -151,15 +166,15 @@ define(['browser'], function (browser) {
         switch (container) {
 
             case 'asf':
-                supported = browser.tizen || browser.edgeUwp;
+                supported = browser.tizen || browser.orsay || browser.edgeUwp;
                 videoAudioCodecs = [];
                 break;
             case 'avi':
-                supported = browser.tizen || browser.edgeUwp;
+                supported = browser.tizen || browser.orsay || browser.edgeUwp;
                 break;
             case 'mpg':
             case 'mpeg':
-                supported = browser.edgeUwp || browser.tizen;
+                supported = browser.edgeUwp || browser.tizen || browser.orsay;
                 break;
             case '3gp':
             case 'flv':
@@ -167,18 +182,24 @@ define(['browser'], function (browser) {
             case 'trp':
             case 'vob':
             case 'vro':
-                supported = browser.tizen;
+                supported = browser.tizen || browser.orsay;
                 break;
             case 'mov':
-                supported = browser.tizen || browser.chrome || browser.edgeUwp;
+                supported = browser.tizen || browser.orsay || browser.chrome || browser.edgeUwp;
                 videoCodecs.push('h264');
                 break;
             case 'm2ts':
-                supported = browser.tizen || browser.web0s || browser.edgeUwp;
+                supported = browser.tizen || browser.orsay || browser.web0s || browser.edgeUwp;
                 videoCodecs.push('h264');
+                if (supportsVc1()) {
+                    videoCodecs.push('vc1');
+                }
+                if (supportsMpeg2Video()) {
+                    videoCodecs.push('mpeg2video');
+                }
                 break;
             case 'wmv':
-                supported = browser.tizen || browser.web0s || browser.edgeUwp;
+                supported = browser.tizen || browser.orsay || browser.web0s || browser.edgeUwp;
                 videoAudioCodecs = [];
                 break;
             case 'ts':
@@ -187,6 +208,12 @@ define(['browser'], function (browser) {
                 if (canPlayH265()) {
                     videoCodecs.push('h265');
                     videoCodecs.push('hevc');
+                }
+                if (supportsVc1()) {
+                    videoCodecs.push('vc1');
+                }
+                if (supportsMpeg2Video()) {
+                    videoCodecs.push('mpeg2video');
                 }
                 profileContainer = 'ts,mpegts';
                 break;
@@ -241,7 +268,7 @@ define(['browser'], function (browser) {
         // Only put mp3 first if mkv support is there
         // Otherwise with HLS and mp3 audio we're seeing some browsers
         // safari is lying
-        if ((videoTestElement.canPlayType('audio/mp4; codecs="ac-3"').replace(/no/, '') && !browser.osx && !browser.iOS) || browser.edgeUwp || browser.tizen || browser.web0s) {
+        if ((videoTestElement.canPlayType('audio/mp4; codecs="ac-3"').replace(/no/, '') && !browser.osx && !browser.iOS) || browser.edgeUwp || browser.tizen || browser.orsay || browser.web0s) {
             videoAudioCodecs.push('ac3');
 
             // This works in edge desktop, but not mobile
@@ -251,7 +278,7 @@ define(['browser'], function (browser) {
             }
         }
 
-        if (browser.tizen) {
+        if (browser.tizen || browser.orsay) {
             videoAudioCodecs.push('eac3');
             hlsVideoAudioCodecs.push('eac3');
         }
@@ -277,9 +304,14 @@ define(['browser'], function (browser) {
             }
         }
 
-        if (browser.tizen || options.supportsDts) {
+        if (browser.tizen || browser.orsay || options.supportsDts) {
             videoAudioCodecs.push('dca');
             videoAudioCodecs.push('dts');
+        }
+
+        if (browser.tizen || browser.orsay) {
+            videoAudioCodecs.push('pcm_s16le');
+            videoAudioCodecs.push('pcm_s24le');
         }
 
         if (options.supportsTrueHd) {
@@ -312,8 +344,11 @@ define(['browser'], function (browser) {
             });
         }
 
-        if (browser.tizen) {
+        if (supportsMpeg2Video()) {
             mp4VideoCodecs.push('mpeg2video');
+        }
+
+        if (supportsVc1()) {
             mp4VideoCodecs.push('vc1');
         }
 
@@ -324,15 +359,6 @@ define(['browser'], function (browser) {
                 VideoCodec: mp4VideoCodecs.join(','),
                 AudioCodec: videoAudioCodecs.join(',')
             });
-
-            if (browser.edgeUwp) {
-                profile.DirectPlayProfiles.push({
-                    Container: 'mkv',
-                    Type: 'Video',
-                    VideoCodec: 'vc1',
-                    AudioCodec: videoAudioCodecs.join(',')
-                });
-            }
         }
 
         // These are formats we can't test for but some devices will support
@@ -344,7 +370,7 @@ define(['browser'], function (browser) {
             profile.DirectPlayProfiles.push(i);
         });
 
-        ['opus', 'mp3', 'aac', 'flac', 'webma', 'wma', 'wav'].filter(canPlayAudioFormat).forEach(function (audioFormat) {
+        ['opus', 'mp3', 'aac', 'flac', 'alac', 'webma', 'wma', 'wav', 'ogg', 'oga'].filter(canPlayAudioFormat).forEach(function (audioFormat) {
 
             profile.DirectPlayProfiles.push({
                 Container: audioFormat === 'webma' ? 'webma,webm' : audioFormat,
@@ -380,7 +406,10 @@ define(['browser'], function (browser) {
             });
         }
 
-        ['mp3', 'aac', 'opus', 'wav'].filter(canPlayAudioFormat).forEach(function (audioFormat) {
+        // For streaming, prioritize opus transcoding after mp3/aac. It is too problematic with random failures
+        // But for static (offline sync), it will be just fine.
+        // Prioritize aac higher because the encoder can accept more channels than mp3
+        ['aac', 'mp3', 'opus', 'wav'].filter(canPlayAudioFormat).forEach(function (audioFormat) {
 
             profile.TranscodingProfiles.push({
                 Container: audioFormat,
@@ -390,6 +419,10 @@ define(['browser'], function (browser) {
                 Protocol: 'http',
                 MaxAudioChannels: physicalAudioChannels.toString()
             });
+        });
+
+        ['opus', 'mp3', 'aac', 'wav'].filter(canPlayAudioFormat).forEach(function (audioFormat) {
+
             profile.TranscodingProfiles.push({
                 Container: audioFormat,
                 Type: 'Audio',
@@ -401,7 +434,7 @@ define(['browser'], function (browser) {
         });
 
         // Can't use mkv on mobile because we have to use the native player controls and they won't be able to seek it
-        if (canPlayMkv && !browser.tizen && options.enableMkvProgressive !== false) {
+        if (canPlayMkv && !browser.tizen && !browser.orsay && options.enableMkvProgressive !== false) {
             profile.TranscodingProfiles.push({
                 Container: 'mkv',
                 Type: 'Video',
@@ -421,7 +454,8 @@ define(['browser'], function (browser) {
                 VideoCodec: 'h264',
                 Context: 'Streaming',
                 Protocol: 'hls',
-                MaxAudioChannels: physicalAudioChannels.toString()
+                MaxAudioChannels: physicalAudioChannels.toString(),
+                MinSegments: browser.iOS || browser.osx ? '2' : '2'
             });
         }
 
@@ -478,7 +512,7 @@ define(['browser'], function (browser) {
 
         profile.CodecProfiles = [];
 
-        var supportsSecondaryAudio = browser.tizen;
+        var supportsSecondaryAudio = browser.tizen || browser.orsay || browser.edge || browser.msie;
 
         // Handle he-aac not supported
         if (!videoTestElement.canPlayType('video/mp4; codecs="avc1.640029, mp4a.40.5"').replace(/no/, '')) {
@@ -523,12 +557,6 @@ define(['browser'], function (browser) {
             });
         }
 
-        var maxLevel = '41';
-
-        if (browser.chrome && !browser.mobile) {
-            maxLevel = '51';
-        }
-
         profile.CodecProfiles.push({
             Type: 'Video',
             Codec: 'h264',
@@ -547,11 +575,11 @@ define(['browser'], function (browser) {
             {
                 Condition: 'LessThanEqual',
                 Property: 'VideoLevel',
-                Value: maxLevel
+                Value: '51'
             }]
         });
 
-        if (!browser.edgeUwp && !browser.tizen && !browser.web0s) {
+        if (!browser.edgeUwp && !browser.tizen && !browser.orsay && !browser.web0s) {
             profile.CodecProfiles[profile.CodecProfiles.length - 1].Conditions.push({
                 Condition: 'NotEquals',
                 Property: 'IsAVC',
@@ -577,10 +605,6 @@ define(['browser'], function (browser) {
             (browser.tizen && isTizenFhd ? '20000000' : '')));
 
         var h264MaxVideoBitrate = globalMaxVideoBitrate;
-        if (browser.tizen && !isTizenFhd) {
-
-            h264MaxVideoBitrate = '60000000';
-        }
 
         if (h264MaxVideoBitrate) {
             profile.CodecProfiles[profile.CodecProfiles.length - 1].Conditions.push({
@@ -600,42 +624,6 @@ define(['browser'], function (browser) {
                     Property: 'VideoBitrate',
                     Value: globalMaxVideoBitrate
                 }]
-            });
-        }
-
-        if (browser.tizen && !isTizenFhd) {
-            profile.CodecProfiles.push({
-                Type: 'Video',
-                Codec: 'vp9',
-                Conditions: [
-                    {
-                        Condition: 'LessThanEqual',
-                        Property: 'VideoBitrate',
-                        Value: '40000000'
-                    }
-                ]
-            });
-            profile.CodecProfiles.push({
-                Type: 'Video',
-                Codec: 'mpeg4,vc1,mpeg2video,mpeg1video,msmpeg4,h263,vp6,vp8',
-                Conditions: [
-                    {
-                        Condition: 'LessThanEqual',
-                        Property: 'VideoBitrate',
-                        Value: '20000000'
-                    }
-                ]
-            });
-            // All others fall here
-            profile.CodecProfiles.push({
-                Type: 'Video',
-                Conditions: [
-                    {
-                        Condition: 'LessThanEqual',
-                        Property: 'VideoBitrate',
-                        Value: '80000000'
-                    }
-                ]
             });
         }
 

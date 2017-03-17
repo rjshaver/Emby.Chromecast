@@ -1,4 +1,4 @@
-﻿define(['apiclientcore', 'localassetmanager', 'events'], function (apiclientcorefactory, localassetmanager, events) {
+﻿define(['apiclientcore', 'localassetmanager', 'events', 'appStorage'], function (apiclientcorefactory, localassetmanager, events, appStorage) {
     'use strict';
 
     var localPrefix = 'local:';
@@ -28,6 +28,29 @@
             set: function (newValue) { apiclientcore.enableAutomaticBitrateDetection = newValue; }
         });
 
+        function getCurrentUser() {
+
+            return apiclientcore.getCurrentUser().then(function (user) {
+
+                appStorage.setItem('user-' + user.Id, JSON.stringify(user));
+                return user;
+
+            }, function (error) {
+
+                var userId = apiclientcore.getCurrentUserId();
+
+                if (userId && apiclientcore.accessToken()) {
+                    var json = appStorage.getItem('user-' + userId);
+
+                    if (json) {
+                        return Promise.resolve(JSON.parse(json));
+                    }
+                }
+
+                return Promise.reject(error);
+            });
+        }
+
         function getUserViews(userId) {
 
             return apiclientcore.getUserViews(userId).then(function (result) {
@@ -48,20 +71,20 @@
                     });
                 }
 
-                return Promis.resolve(result);
+                return Promise.resolve(result);
             });
         }
 
         function getLocalView(serverId, userId) {
 
-            return localassetmanager.getViews(serverId, userId).then(function (views) {
+            return getLocalFolders(serverId, userId).then(function (views) {
 
                 var localView = null;
 
                 if (views.length > 0) {
 
                     localView = {
-                        Name: 'Offline Items',
+                        Name: self.downloadsTitleText || 'Downloads',
                         ServerId: serverId,
                         Id: 'localview',
                         Type: 'localview'
@@ -72,6 +95,14 @@
             });
         }
 
+        function getLocalFolders(userId) {
+
+            var serverInfo = apiclientcore.serverInfo();
+            userId = userId || serverInfo.UserId;
+
+            return localassetmanager.getViews(serverInfo.Id, userId);
+        }
+
         function getItems(userId, options) {
 
             var serverInfo = apiclientcore.serverInfo();
@@ -79,7 +110,7 @@
 
             if (serverInfo && options.ParentId === 'localview') {
 
-                return localassetmanager.getViews(serverInfo.Id, userId).then(function (items) {
+                return getLocalFolders(serverInfo.Id, userId).then(function (items) {
                     var result = {
                         Items: items,
                         TotalRecordCount: items.length
@@ -88,12 +119,12 @@
                     return Promise.resolve(result);
                 });
 
-            } else if (serverInfo && options && (startsWith(options.ParentId, localViewPrefix) || startsWith(options.ParentId, localPrefix))) {
+            } else if (serverInfo && options && (isLocalId(options.ParentId) || isLocalViewId(options.ParentId))) {
 
-                return localassetmanager.getViewItems(serverInfo.Id, userId, options.ParentId).then(function (items) {
+                return localassetmanager.getViewItems(serverInfo.Id, userId, options).then(function (items) {
 
                     items.forEach(function (item) {
-                        item.Id = localPrefix + item.Id;
+                        adjustGuidProperties(item);
                     });
 
                     items.sort(function (a, b) { return a.SortName.toLowerCase().localeCompare(b.SortName.toLowerCase()); });
@@ -110,7 +141,7 @@
                 var exItems = options.ExcludeItemIds.split(',');
 
                 for (i = 0; i < exItems.length; i++) {
-                    if (startsWith(exItems[i], localPrefix)) {
+                    if (isLocalId(exItems[i])) {
                         return Promise.resolve(createEmptyList());
                     }
                 }
@@ -120,7 +151,7 @@
                 var hasLocal = false;
 
                 for (i = 0; i < ids.length; i++) {
-                    if (startsWith(ids[i], localPrefix)) {
+                    if (isLocalId(ids[i])) {
                         hasLocal = true;
                     }
                 }
@@ -129,7 +160,7 @@
                     return localassetmanager.getItemsFromIds(serverInfo.Id, ids).then(function (items) {
 
                         items.forEach(function (item) {
-                            item.Id = localPrefix + item.Id;
+                            adjustGuidProperties(item);
                         });
 
                         var result = {
@@ -153,12 +184,12 @@
 
             var serverInfo;
 
-            if (startsWith(itemId, localViewPrefix)) {
+            if (isLocalViewId(itemId)) {
 
                 serverInfo = apiclientcore.serverInfo();
 
                 if (serverInfo) {
-                    return localassetmanager.getViews(serverInfo.Id, userId).then(function (items) {
+                    return getLocalFolders(serverInfo.Id, userId).then(function (items) {
 
                         var views = items.filter(function (item) {
                             return item.Id === itemId;
@@ -174,14 +205,14 @@
                 }
             }
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
 
                 serverInfo = apiclientcore.serverInfo();
 
                 if (serverInfo) {
-                    return localassetmanager.getLocalItem(serverInfo.Id, stripStart(itemId, localPrefix)).then(function (item) {
+                    return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(itemId)).then(function (item) {
 
-                        item.Item.Id = localPrefix + item.Item.Id;
+                        adjustGuidProperties(item.Item);
 
                         return Promise.resolve(item.Item);
                     });
@@ -191,10 +222,40 @@
             return apiclientcore.getItem(userId, itemId);
         }
 
+        function adjustGuidProperties(downloadedItem) {
+
+            downloadedItem.Id = convertGuidToLocal(downloadedItem.Id);
+            downloadedItem.SeriesId = convertGuidToLocal(downloadedItem.SeriesId);
+            downloadedItem.SeasonId = convertGuidToLocal(downloadedItem.SeasonId);
+
+            downloadedItem.AlbumId = convertGuidToLocal(downloadedItem.AlbumId);
+            downloadedItem.ParentId = convertGuidToLocal(downloadedItem.ParentId);
+            downloadedItem.ParentThumbItemId = convertGuidToLocal(downloadedItem.ParentThumbItemId);
+            downloadedItem.ParentPrimaryImageItemId = convertGuidToLocal(downloadedItem.ParentPrimaryImageItemId);
+            downloadedItem.PrimaryImageItemId = convertGuidToLocal(downloadedItem.PrimaryImageItemId);
+            downloadedItem.ParentLogoItemId = convertGuidToLocal(downloadedItem.ParentLogoItemId);
+            downloadedItem.ParentBackdropItemID = convertGuidToLocal(downloadedItem.ParentBackdropItemID);
+
+            downloadedItem.ParentBackdropImageTags = null;
+        }
+
+        function convertGuidToLocal(guid) {
+
+            if (!guid) {
+                return null;
+            }
+
+            if (isLocalId(guid)) {
+                return guid;
+            }
+
+            return 'local:' + guid;
+        }
+
         function getNextUpEpisodes(options) {
 
             if (options.SeriesId) {
-                if (startsWith(options.SeriesId, localPrefix)) {
+                if (isLocalId(options.SeriesId)) {
                     return Promise.resolve(createEmptyList());
                 }
             }
@@ -204,7 +265,7 @@
 
         function getSeasons(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 options.ParentId = itemId;
                 return getItems(apiclientcore.getCurrentUserId(), options);
             }
@@ -214,9 +275,33 @@
 
         function getEpisodes(itemId, options) {
 
-            if (startsWith(options.SeasonId, localPrefix)) {
+            if (isLocalId(options.SeasonId)) {
                 options.ParentId = options.SeasonId;
                 return getItems(apiclientcore.getCurrentUserId(), options);
+            }
+
+            if (isLocalId(options.seasonId)) {
+                options.ParentId = options.seasonId;
+                return getItems(apiclientcore.getCurrentUserId(), options);
+            }
+
+            // get episodes by recursion
+            if (isLocalId(itemId)) {
+                options.ParentId = itemId;
+                options.Recursive = true;
+                return getItems(apiclientcore.getCurrentUserId(), options).then(function (items) {
+                    var items2 = items.Items.filter(function (item) {
+
+                        return item.Type.toLowerCase() === 'episode';
+                    });
+
+                    var result = {
+                        Items: items2,
+                        TotalRecordCount: items2.length
+                    };
+
+                    return Promise.resolve(result);
+                });
             }
 
             return apiclientcore.getEpisodes(itemId, options);
@@ -224,7 +309,7 @@
 
         function getThemeMedia(userId, itemId, inherit) {
 
-            if (startsWith(itemId, localViewPrefix) || startsWith(itemId, localPrefix)) {
+            if (isLocalViewId(itemId) || isLocalId(itemId)) {
                 return Promise.reject();
             }
 
@@ -233,7 +318,7 @@
 
         function getSimilarItems(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 return Promise.resolve(createEmptyList());
             }
 
@@ -242,7 +327,7 @@
 
         function updateFavoriteStatus(userId, itemId, isFavorite) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId)) {
                 return Promise.resolve();
             }
 
@@ -251,14 +336,13 @@
 
         function getScaledImageUrl(itemId, options) {
 
-            if (startsWith(itemId, localPrefix)) {
+            if (isLocalId(itemId) || (options && options.itemid && isLocalId(options.itemid))) {
 
                 var serverInfo = apiclientcore.serverInfo();
-                var id = stripStart(itemId, localPrefix);
+                var id = stripLocalPrefix(itemId);
 
                 return localassetmanager.getImageUrl(serverInfo.Id, id, options.type, 0);
             }
-
 
             return apiclientcore.getScaledImageUrl(itemId, options);
         }
@@ -268,7 +352,169 @@
             events.trigger(self, 'websocketmessage', [msg]);
         }
 
+
+        function getPlaybackInfo(itemId, options, deviceProfile) {
+
+            if (isLocalId(itemId)) {
+                return localassetmanager.getLocalItem(apiclientcore.serverId(), stripLocalPrefix(itemId)).then(function (item) {
+
+                    // TODO: This was already done during the sync process, right? If so, remove it
+                    var mediaSources = item.Item.MediaSources.map(function (m) {
+                        m.SupportsDirectPlay = true;
+                        m.SupportsDirectStream = false;
+                        m.SupportsTranscoding = false;
+                        m.IsLocal = true;
+                        return m;
+                    });
+
+                    return {
+                        MediaSources: mediaSources
+                    };
+                });
+            }
+
+            return localassetmanager.getLocalItem(apiclientcore.serverId(), itemId).then(function (item) {
+
+                if (item) {
+
+                    var mediaSources = item.Item.MediaSources.map(function (m) {
+                        m.SupportsDirectPlay = true;
+                        m.SupportsDirectStream = false;
+                        m.SupportsTranscoding = false;
+                        m.IsLocal = true;
+                        return m;
+                    });
+
+                    return localassetmanager.fileExists(item.LocalPath).then(function (exists) {
+
+                        if (exists) {
+
+                            var res = {
+                                MediaSources: mediaSources
+                            };
+
+                            return Promise.resolve(res);
+                        }
+
+                        return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+                    });
+                }
+
+                return apiclientcore.getPlaybackInfo(itemId, options, deviceProfile);
+            });
+        }
+
+        function reportPlaybackStart(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+                return Promise.resolve();
+            }
+
+            return apiclientcore.reportPlaybackStart(options);
+        }
+
+        function reportPlaybackProgress(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+                return Promise.resolve();
+            }
+
+            return apiclientcore.reportPlaybackProgress(options);
+        }
+
+        function reportPlaybackStopped(options) {
+
+            if (!options) {
+                throw new Error("null options");
+            }
+
+            if (isLocalId(options.ItemId)) {
+
+                var serverInfo = apiclientcore.serverInfo();
+
+                var action =
+                {
+                    Date: new Date().getTime(),
+                    ItemId: stripLocalPrefix(options.ItemId),
+                    PositionTicks: options.PositionTicks,
+                    ServerId: serverInfo.Id,
+                    Type: 0, // UserActionType.PlayedItem
+                    UserId: apiclientcore.getCurrentUserId()
+                };
+
+                return localassetmanager.recordUserAction(action);
+            }
+
+            return apiclientcore.reportPlaybackStopped(options);
+        }
+
+        function getIntros(itemId) {
+
+            if (isLocalId(itemId)) {
+                return Promise.resolve({
+                    Items: [],
+                    TotalRecordCount: 0
+                });
+            }
+
+            return apiclientcore.getIntros(itemId);
+        }
+
+        function getInstantMixFromItem(itemId, options) {
+
+            if (isLocalId(itemId)) {
+                return Promise.resolve({
+                    Items: [],
+                    TotalRecordCount: 0
+                });
+            }
+
+            return apiclientcore.getInstantMixFromItem(itemId, options);
+        }
+
+        function getItemDownloadUrl(itemId) {
+
+
+            if (isLocalId(itemId)) {
+
+                var serverInfo = apiclientcore.serverInfo();
+
+                if (serverInfo) {
+
+                    return localassetmanager.getLocalItem(serverInfo.Id, stripLocalPrefix(itemId)).then(function (item) {
+
+                        return Promise.resolve(item.LocalPath);
+                    });
+                }
+            }
+
+            return apiclientcore.getItemDownloadUrl(itemId);
+        }
+
         // **************** Helper functions
+
+        function isLocalId(str) {
+            return startsWith(str, localPrefix);
+        }
+
+        function isLocalViewId(str) {
+            return startsWith(str, localViewPrefix);
+        }
+
+        function stripLocalPrefix(str) {
+            var res = stripStart(str, localPrefix);
+            res = stripStart(res, localViewPrefix);
+
+            return res;
+        }
 
         function startsWith(str, find) {
 
@@ -298,68 +544,38 @@
             return result;
         }
 
-        function getPlaybackInfo(itemId, options, deviceProfile) {
+        self.getLatestOfflineItems = function (options) {
 
-            return localassetmanager.getLocalItem(apiclientcore.serverId(), stripStart(itemId, localPrefix)).then(function (item) {
+            // Supported options
+            // MediaType - Audio/Video/Photo/Book/Game
+            // Limit
+            // Filters: 'IsNotFolder' or 'IsFolder'
 
-                // TODO: This was already done during the sync process, right? If so, remove it
-                var mediaSources = item.Item.MediaSources.map(function (m) {
-                    m.SupportsDirectPlay = true;
-                    m.SupportsDirectStream = false;
-                    m.SupportsTranscoding = false;
-                    return m;
+            options.SortBy = 'DateCreated';
+            options.SortOrder = 'Descending';
+
+            var serverInfo = apiclientcore.serverInfo();
+
+            if (serverInfo) {
+
+                return localassetmanager.getViewItems(serverInfo.Id, null, options).then(function (items) {
+                        
+                    items.forEach(function (item) {
+                        adjustGuidProperties(item);
+                    });
+
+                    return Promise.resolve(items);
                 });
-
-                return {
-                    MediaSources: mediaSources
-                };
-            });
-        }
-
-        // "Override" methods
-
-        self.detectBitrate = function () {
-            return Promise.reject();
-        };
-
-        self.reportPlaybackStart = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
             }
 
-            return Promise.resolve();
+            return Promise.resolve([]);
         };
 
-        self.reportPlaybackProgress = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            return Promise.resolve();
-        };
-
-        self.reportPlaybackStopped = function (options) {
-
-            if (!options) {
-                throw new Error("null options");
-            }
-
-            return Promise.resolve();
-        };
-
-        self.getIntros = function (itemId) {
-
-            return Promise.resolve({
-                Items: [],
-                TotalRecordCount: 0
-            });
-        };
-
+        self.getCurrentUser = getCurrentUser;
         self.getUserViews = getUserViews;
         self.getItems = getItems;
         self.getItem = getItem;
+        self.getLocalFolders = getLocalFolders;
         self.getSeasons = getSeasons;
         self.getEpisodes = getEpisodes;
         self.getThemeMedia = getThemeMedia;
@@ -368,6 +584,12 @@
         self.updateFavoriteStatus = updateFavoriteStatus;
         self.getScaledImageUrl = getScaledImageUrl;
         self.getPlaybackInfo = getPlaybackInfo;
+        self.reportPlaybackStart = reportPlaybackStart;
+        self.reportPlaybackProgress = reportPlaybackProgress;
+        self.reportPlaybackStopped = reportPlaybackStopped;
+        self.getIntros = getIntros;
+        self.getInstantMixFromItem = getInstantMixFromItem;
+        self.getItemDownloadUrl = getItemDownloadUrl;
     };
 
 });

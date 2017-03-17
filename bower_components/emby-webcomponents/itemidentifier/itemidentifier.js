@@ -194,8 +194,10 @@
 
         if (layoutManager.tv) {
             cssClass += ' card-focusscale';
-            cardBoxCssClass += ' cardBox-focustransform cardBox-focustransform-transition';
+            cardBoxCssClass += ' cardBox-focustransform';
         }
+
+        cardBoxCssClass += ' card-focuscontent';
 
         html += '<button type="button" class="' + cssClass + '" data-index="' + index + '">';
         html += '<div class="' + cardBoxCssClass + '">';

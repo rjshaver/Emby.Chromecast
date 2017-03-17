@@ -1,4 +1,4 @@
-define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackManager', 'embyRouter', 'appSettings', 'connectionManager'], function (browser, pluginManager, events, appHost, loading, playbackManager, embyRouter, appSettings, connectionManager) {
+define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackManager', 'embyRouter', 'appSettings', 'connectionManager', 'itemHelper'], function (browser, pluginManager, events, appHost, loading, playbackManager, embyRouter, appSettings, connectionManager, itemHelper) {
     "use strict";
 
     return function () {
@@ -27,6 +27,7 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
         var currentClock;
         var currentAssRenderer;
         var customTrackIndex = -1;
+        var currentAspectRatio;
 
         self.canPlayMediaType = function (mediaType) {
 
@@ -43,71 +44,24 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             }
         }
 
-        function getBaseProfileOptions(item) {
-
-            var disableHlsVideoAudioCodecs = [];
-            if (!canPlayNativeHls() || (browser.edge && !item.RunTimeTicks)) {
-
-                // this does not work with hls.js + edge, but seems to be fine in other browsers
-                if (browser.edge) {
-                    disableHlsVideoAudioCodecs.push('mp3');
-                }
-
-                // hls.js does not support this
-                disableHlsVideoAudioCodecs.push('ac3');
-            }
-
-            var enableMkvProgressive = (item.RunTimeTicks && browser.edgeUwp) ? true : false;
-
-            return {
-                enableMkvProgressive: enableMkvProgressive,
-                disableHlsVideoAudioCodecs: disableHlsVideoAudioCodecs
-            };
-        }
-
-        function getDeviceProfileForWindowsUwp(item) {
+        function getDefaultProfile() {
 
             return new Promise(function (resolve, reject) {
 
-                require(['browserdeviceprofile', 'environments/windows-uwp/mediacaps'], function (profileBuilder, uwpMediaCaps) {
+                require(['browserdeviceprofile'], function (profileBuilder) {
 
-                    var profileOptions = getBaseProfileOptions(item);
-                    profileOptions.supportsDts = uwpMediaCaps.supportsDTS();
-                    profileOptions.supportsTrueHd = uwpMediaCaps.supportsDolby();
-                    profileOptions.audioChannels = uwpMediaCaps.getAudioChannels();
-
-                    resolve(profileBuilder(profileOptions));
+                    resolve(profileBuilder({}));
                 });
             });
         }
 
         self.getDeviceProfile = function (item) {
 
-            if (window.Windows) {
-                return getDeviceProfileForWindowsUwp(item);
+            if (appHost.getDeviceProfile) {
+                return appHost.getDeviceProfile(item);
             }
 
-            return new Promise(function (resolve, reject) {
-
-                require(['browserdeviceprofile'], function (profileBuilder) {
-
-                    var profile = profileBuilder(getBaseProfileOptions(item));
-
-                    if (!browser.edge && !browser.msie) {
-                        // libjass not working here
-                        profile.SubtitleProfiles.push({
-                            Format: 'ass',
-                            Method: 'External'
-                        });
-                        profile.SubtitleProfiles.push({
-                            Format: 'ssa',
-                            Method: 'External'
-                        });
-                    }
-
-                    resolve(profile);
-                });
-            });
+            return getDefaultProfile();
         };
 
         self.currentSrc = function () {
@@ -161,7 +115,15 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
         self.play = function (options) {
 
+            if (browser.msie) {
+                if (options.playMethod === 'Transcode' && !window.MediaSource) {
+                    alert('Playback of this content is not supported in Internet Explorer. For a better experience, try a modern browser such as Microsoft Edge, Google Chrome, Firefox or Opera.');
+                    return Promise.reject();
+                }
+            }
+
             started = false;
+
             _currentTime = null;
 
             return createMediaElement(options).then(function (elem) {
@@ -179,18 +141,19 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
             var video = document.createElement('video');
             //if (video.webkitSupportsPresentationMode && video.webkitSupportsPresentationMode('picture-in-picture') && typeof video.webkitSetPresentationMode === "function") {
-            //    list.push('pictureinpicture');
+            //    list.push('PictureInPicture');
             //}
             if (browser.ipad) {
 
                 // Unfortunately this creates a false positive on devices where its' not actually supported
                 if (navigator.userAgent.toLowerCase().indexOf('os 9') === -1) {
                     if (video.webkitSupportsPresentationMode && video.webkitSupportsPresentationMode && typeof video.webkitSetPresentationMode === "function") {
-                        list.push('pictureinpicture');
+                        list.push('PictureInPicture');
                     }
                 }
             }
 
+            list.push('SetBrightness');
             return list;
         }
 
@@ -201,6 +164,24 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             }
 
             return supportedFeatures.indexOf(feature) !== -1;
+        };
+
+        self.setAspectRatio = function (val) {
+
+            var video = mediaElement;
+            if (video) {
+                currentAspectRatio = val;
+            }
+        };
+
+        self.getAspectRatio = function () {
+
+            return currentAspectRatio;
+        };
+
+        self.getSupportedAspectRatios = function () {
+
+            return [];
         };
 
         self.togglePictureInPicture = function () {
@@ -228,6 +209,10 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
         };
 
         function getCrossOriginValue(mediaSource) {
+
+            if (mediaSource.IsRemote) {
+                return null;
+            }
 
             return 'anonymous';
         }
@@ -262,6 +247,8 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             //    return;
             //}
 
+            elem.removeEventListener('error', onError);
+
             var val = options.url;
 
             console.log('playing url: ' + val);
@@ -291,7 +278,10 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
             currentPlayOptions = options;
 
-            elem.crossOrigin = getCrossOriginValue(options.mediaSource);
+            var crossOrigin = getCrossOriginValue(options.mediaSource);
+            if (crossOrigin) {
+                elem.crossOrigin = crossOrigin;
+            }
 
             if (enableHlsPlayer(val, options.item, options.mediaSource)) {
 
@@ -365,8 +355,16 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
                     elem.addEventListener('loadedmetadata', onLoadedMetadata);
                 } else {
-                    applySrc(elem, val);
-                    setTracks(elem, tracks, options.mediaSource, options.item.ServerId);
+
+                    return applySrc(elem, val, options).then(function () {
+
+                        setTracks(elem, tracks, options.mediaSource, options.item.ServerId);
+
+                        currentSrc = val;
+
+                        setCurrentTrackElement(currentTrackIndex);
+                        return playWithPromise(elem);
+                    });
                 }
 
                 // This is needed in setCurrentTrackElement
@@ -403,26 +401,37 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
                     hlsPlayer.recoverMediaError();
                 } else {
                     console.error('cannot recover, last media error recovery failed ...');
+                    onErrorInternal('mediadecodeerror');
                 }
             }
         }
 
-        function applySrc(elem, src) {
+        function applySrc(elem, src, options) {
 
-            if (window.Windows) {
+            if (window.Windows && options.mediaSource && options.mediaSource.IsLocal) {
 
-                var playlist = new Windows.Media.Playback.MediaPlaybackList();
-                var source1 = Windows.Media.Core.MediaSource.createFromUri(new Windows.Foundation.Uri(src));
+                return Windows.Storage.StorageFile.getFileFromPathAsync(options.url).then(function (file) {
 
-                winJsPlaybackItem = new Windows.Media.Playback.MediaPlaybackItem(source1);
-                playlist.items.append(winJsPlaybackItem);
+                    var playlist = new Windows.Media.Playback.MediaPlaybackList();
 
-                elem.src = URL.createObjectURL(playlist, { oneTimeOnly: true });
+                    var source1 = Windows.Media.Core.MediaSource.createFromStorageFile(file);
+                    var startTime = (options.playerStartPositionTicks || 0) / 10000;
+                    playlist.items.append(new Windows.Media.Playback.MediaPlaybackItem(source1, startTime));
+                    elem.src = URL.createObjectURL(playlist, { oneTimeOnly: true });
+                    return Promise.resolve();
+                });
 
             } else {
 
                 elem.src = src;
             }
+
+            return Promise.resolve();
+        }
+
+        function onSuccessfulPlay(elem) {
+
+            elem.addEventListener('error', onError);
         }
 
         function playWithPromise(elem) {
@@ -438,11 +447,13 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
                         if (errorName === 'notallowederror' ||
                             errorName === 'aborterror') {
                             // swallow this error because the user can still click the play button on the video element
+                            onSuccessfulPlay(elem);
                             return Promise.resolve();
                         }
                         return Promise.reject();
                     });
                 } else {
+                    onSuccessfulPlay(elem);
                     return Promise.resolve();
                 }
             } catch (err) {
@@ -458,7 +469,7 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
         self.canSetAudioStreamIndex = function () {
 
-            if (winJsPlaybackItem) {
+            if (browser.edge || browser.msie) {
                 return true;
             }
 
@@ -467,19 +478,37 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
 
         self.setAudioStreamIndex = function (index) {
 
-            var audioTracks = getMediaStreamAudioTracks(currentPlayOptions.mediaSource);
+            var audioStreams = getMediaStreamAudioTracks(currentPlayOptions.mediaSource);
 
-            var track = audioTracks.filter(function (t) {
-                return t.Index === index;
-            })[0];
+            var audioTrackOffset = -1;
+            var i, length;
 
-            if (!track) {
+            for (i = 0, length = audioStreams.length; i < length; i++) {
+
+                if (audioStreams[i].Index === index) {
+                    audioTrackOffset = i;
+                    break;
+                }
+            }
+
+            if (audioTrackOffset === -1) {
                 return;
             }
 
-            if (winJsPlaybackItem) {
-                var audioIndex = audioTracks.indexOf(track);
-                winJsPlaybackItem.audioTracks.selectedIndex = audioIndex;
+            var elem = mediaElement;
+            if (!elem) {
+                return;
+            }
+
+            // https://msdn.microsoft.com/en-us/library/hh772507(v=vs.85).aspx
+            var elemAudioTracks = elem.audioTracks || [];
+            for (i = 0, length = elemAudioTracks.length; i < length; i++) {
+
+                if (audioTrackOffset === i) {
+                    elemAudioTracks[i].enabled = true;
+                } else {
+                    elemAudioTracks[i].enabled = false;
+                }
             }
         };
 
@@ -518,17 +547,13 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             var elem = mediaElement;
             var src = currentSrc;
 
-            if (elem && src) {
+            if (elem) {
 
-                elem.pause();
+                if (src) {
+                    elem.pause();
+                }
 
-                elem.src = '';
-                elem.innerHTML = '';
-                elem.removeAttribute("src");
-
-                destroyHlsPlayer();
-
-                onEndedInternal(reportEnded);
+                onEndedInternal(reportEnded, elem);
 
                 if (destroyPlayer) {
                     self.destroy();
@@ -558,7 +583,6 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
                 videoElement.removeEventListener('volumechange', onVolumeChange);
                 videoElement.removeEventListener('pause', onPause);
                 videoElement.removeEventListener('playing', onPlaying);
-                videoElement.removeEventListener('error', onError);
                 videoElement.removeEventListener('loadedmetadata', onLoadedMetadata);
                 videoElement.removeEventListener('click', onClick);
                 videoElement.removeEventListener('dblclick', onDblClick);
@@ -616,6 +640,33 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             return false;
         };
 
+        self.setBrightness = function (val) {
+
+            var elem = mediaElement;
+
+            if (elem) {
+
+                val = Math.max(0, val);
+                val = Math.min(100, val);
+
+                var rawValue = val;
+                rawValue = Math.max(20, rawValue);
+
+                var cssValue = rawValue >= 100 ? 'none' : (rawValue / 100);
+                elem.style['-webkit-filter'] = 'brightness(' + cssValue + ');';
+                elem.style.filter = 'brightness(' + cssValue + ')';
+                elem.brightnessValue = val;
+                events.trigger(self, 'brightnesschange');
+            }
+        };
+
+        self.getBrightness = function () {
+            if (mediaElement) {
+                var val = mediaElement.brightnessValue;
+                return val == null ? 100 : val;
+            }
+        };
+
         self.setVolume = function (val) {
             if (mediaElement) {
                 mediaElement.volume = val / 100;
@@ -653,10 +704,18 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
         function onEnded() {
 
             destroyCustomTrack(this);
-            onEndedInternal(true);
+            onEndedInternal(true, this);
         }
 
-        function onEndedInternal(triggerEnded) {
+        function onEndedInternal(triggerEnded, elem) {
+
+            elem.removeEventListener('error', onError);
+
+            elem.src = '';
+            elem.innerHTML = '';
+            elem.removeAttribute("src");
+
+            destroyHlsPlayer();
 
             if (self.originalDocumentTitle) {
                 document.title = self.originalDocumentTitle;
@@ -675,13 +734,13 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             }
 
             currentSrc = null;
-            winJsPlaybackItem = null;
         }
 
         function onTimeUpdate(e) {
 
             // Get the player position + the transcoding offset
             var time = this.currentTime;
+
             _currentTime = time;
             var timeMs = time * 1000;
             timeMs += ((currentPlayOptions.transcodingOffsetTicks || 0) / 10000);
@@ -787,19 +846,34 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
                     break;
                 case 3:
                     // MEDIA_ERR_DECODE
-                    handleMediaError();
-                    return;
+                    if (hlsPlayer) {
+                        handleMediaError();
+                        return;
+                    } else {
+                        type = 'mediadecodeerror';
+                    }
+                    break;
                 case 4:
                     // MEDIA_ERR_SRC_NOT_SUPPORTED
+                    type = 'medianotsupported';
                     break;
+                default:
+                    // seeing cases where Edge is firing error events with no error code
+                    // example is start playing something, then immediately change src to something else
+                    return;
             }
 
-            destroyCustomTrack(this);
+            onErrorInternal(type);
+        }
 
-            //events.trigger(self, 'error', [
-            //{
-            //    type: type
-            //}]);
+        function onErrorInternal(type) {
+
+            destroyCustomTrack(mediaElement);
+
+            events.trigger(self, 'error', [
+            {
+                type: type
+            }]);
         }
 
         function onLoadedMetadata(e) {
@@ -921,21 +995,19 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
             window.removeEventListener('resize', onVideoResize);
             window.removeEventListener('orientationchange', onVideoResize);
 
-            if (isPlaying) {
+            var allTracks = videoElement.textTracks || []; // get list of tracks
+            for (var i = 0; i < allTracks.length; i++) {
 
-                var allTracks = mediaElement.textTracks; // get list of tracks
-                for (var i = 0; i < allTracks.length; i++) {
+                var currentTrack = allTracks[i];
 
-                    var currentTrack = allTracks[i];
-
-                    if (currentTrack.label.indexOf('manualTrack') !== -1) {
-                        currentTrack.mode = 'disabled';
-                    }
+                if (currentTrack.label.indexOf('manualTrack') !== -1) {
+                    currentTrack.mode = 'disabled';
                 }
             }
 
             customTrackIndex = -1;
             currentClock = null;
+            currentAspectRatio = null;
 
             var renderer = currentAssRenderer;
             if (renderer) {
@@ -1264,7 +1336,6 @@ define(['browser', 'pluginManager', 'events', 'apphost', 'loading', 'playbackMan
                         videoElement.addEventListener('volumechange', onVolumeChange);
                         videoElement.addEventListener('pause', onPause);
                         videoElement.addEventListener('playing', onPlaying);
-                        videoElement.addEventListener('error', onError);
                         videoElement.addEventListener('click', onClick);
                         videoElement.addEventListener('dblclick', onDblClick);
 

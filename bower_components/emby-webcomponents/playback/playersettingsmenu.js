@@ -54,13 +54,9 @@ define(['actionsheet', 'datetime', 'playbackManager', 'globalize', 'appSettings'
         });
     }
 
-    function showSettingsMenu(player, btn) {
-
-    }
-
     function getQualitySecondaryText(player) {
 
-        return playbackManager.getPlayerState(player).then(function(state) {
+        return playbackManager.getPlayerState(player).then(function (state) {
             var isAutoEnabled = playbackManager.enableAutomaticBitrateDetection(player);
             var currentMaxBitrate = playbackManager.getMaxStreamingBitrate(player);
 
@@ -115,15 +111,56 @@ define(['actionsheet', 'datetime', 'playbackManager', 'globalize', 'appSettings'
         });
     }
 
+    function showAspectRatioMenu(player, btn) {
+
+        // Each has name/id
+        var currentId = playbackManager.getAspectRatio(player);
+        var menuItems = playbackManager.getSupportedAspectRatios(player).map(function (i) {
+            return {
+                id: i.id,
+                name: i.name,
+                selected: i.id === currentId
+            };
+        });
+
+        return actionsheet.show({
+
+            items: menuItems,
+            positionTo: btn
+
+        }).then(function (id) {
+
+            if (id) {
+                playbackManager.setAspectRatio(id, player);
+                return Promise.resolve();
+            }
+
+            return Promise.reject();
+        });
+    }
+
     function show(options) {
 
         var player = options.player;
 
         return getQualitySecondaryText(player).then(function (secondaryQualityText) {
             var mediaType = options.mediaType;
-            //return showQualityMenu(player, options.positionTo);
 
             var menuItems = [];
+
+            if (player.supports && player.supports('SetAspectRatio')) {
+
+                var currentAspectRatioId = playbackManager.getAspectRatio(player);
+                var currentAspectRatio = playbackManager.getSupportedAspectRatios(player).filter(function (i) {
+                    return i.id === currentAspectRatioId;
+                })[0];
+
+                menuItems.push({
+                    name: globalize.translate('sharedcomponents#AspectRatio'),
+                    id: 'aspectratio',
+                    secondaryText: currentAspectRatio ? currentAspectRatio.name : null
+                });
+            }
 
             menuItems.push({
                 name: globalize.translate('sharedcomponents#Quality'),
@@ -147,8 +184,8 @@ define(['actionsheet', 'datetime', 'playbackManager', 'globalize', 'appSettings'
 
                     case 'quality':
                         return showQualityMenu(player, options.positionTo);
-                    case 'settings':
-                        return showSettingsMenu(player, options.positionTo);
+                    case 'aspectratio':
+                        return showAspectRatioMenu(player, options.positionTo);
                     default:
                         break;
                 }

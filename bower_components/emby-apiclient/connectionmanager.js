@@ -216,7 +216,7 @@
             return connectUser;
         };
 
-        var minServerVersion = '3.0.8500';
+        var minServerVersion = '3.1.2';
         self.minServerVersion = function (val) {
 
             if (val) {
@@ -252,6 +252,13 @@
         };
 
         self.getApiClients = function () {
+
+            var servers = self.getSavedServers();
+
+            servers.map(function(s) {
+                self.getOrCreateApiClient(s.Id);
+            });
+
             return apiClients;
         };
 
@@ -954,9 +961,7 @@
 
                     if (result.State === ConnectionState.Unavailable) {
 
-                        result.State = result.ConnectUser == null ?
-                            ConnectionState.ConnectSignIn :
-                            ConnectionState.ServerSelection;
+                        result.State = ConnectionState.ServerSelection;
                     }
 
                     console.log('resolving connectToServers with result.State: ' + result.State);
@@ -1361,8 +1366,11 @@
                 }
 
             }).then(function (result) {
-
                 if (result && result.Status) {
+
+                    if (result.Status === 'SUCCESS') {
+                        return Promise.resolve(result);
+                    }
                     return Promise.reject({ errorCode: result.Status });
                 } else {
                     Promise.reject();

@@ -1,26 +1,8 @@
-﻿define(['filerepository', 'itemrepository', 'userrepository', 'useractionrepository', 'transfermanager', 'cryptojs-md5'], function (filerepository, itemrepository, userrepository, useractionrepository, transfermanager) {
+﻿define(['filerepository', 'itemrepository', 'useractionrepository', 'transfermanager', 'cryptojs-md5'], function (filerepository, itemrepository, useractionrepository, transfermanager) {
     'use strict';
 
     function getLocalItem(serverId, itemId) {
-        var id = getLocalId(serverId, itemId);
-        return itemrepository.get(id);
-    }
-
-    function getLocalItemById(id) {
-        return itemrepository.get(id);
-    }
-
-    function getLocalId(serverId, itemId) {
-
-        return CryptoJS.MD5(serverId + itemId).toString();
-    }
-
-    function saveOfflineUser(user) {
-        return userrepository.set(user.Id, user);
-    }
-
-    function deleteOfflineUser(id) {
-        return userrepository.remove(id);
+        return itemrepository.get(serverId, itemId);
     }
 
     function recordUserAction(action) {
@@ -47,23 +29,9 @@
         return Promise.all(results);
     }
 
-    function getServerItemIds(serverId) {
-        return itemrepository.getServerItemIds(serverId);
-    }
-
     function getServerItems(serverId) {
 
-        return itemrepository.getServerIds(serverId).then(function (localIds) {
-
-            var actions = localIds.map(function (id) {
-                return getLocalItemById(id);
-            });
-
-            return Promise.all(actions).then(function (items) {
-
-                return Promise.resolve(items);
-            });
-        });
+        return itemrepository.getAll(serverId);
     }
 
     function getItemsFromIds(serverId, ids) {
@@ -209,19 +177,32 @@
         return typeFilter;
     }
 
-    function getViewItems(serverId, userId, parentId) {
+    function getViewItems(serverId, userId, options) {
 
-        var typeFilter = getTypeFilterForTopLevelView(parentId);
+        var parentId = options.ParentId;
+
+        var typeFilterTop = getTypeFilterForTopLevelView(parentId);
+
+        var typeFilter = options.MediaType;
+        if (!typeFilter) {
+            typeFilter = typeFilterTop;
+        }
 
         parentId = stripStart(parentId, 'localview:');
         parentId = stripStart(parentId, 'local:');
 
         return getServerItems(serverId).then(function (items) {
 
+            //debugPrintItems(items);
+
             var resultItemIds = items.filter(function (item) {
 
                 if (item.SyncStatus && item.SyncStatus !== 'synced') {
                     return false;
+                }
+
+                if (options.MediaType) {
+                    return item.Item.MediaType === options.MediaType;
                 }
 
                 if (typeFilter) {
@@ -233,7 +214,7 @@
 
             }).map(function (item2) {
 
-                switch (typeFilter) {
+                switch (typeFilterTop) {
                     case 'audio':
                     case 'photo':
                         return item2.Item.AlbumId;
@@ -245,26 +226,148 @@
 
             }).filter(filterDistinct);
 
+            if (options.Recursive) {
+
+                // Recurse only one level for now
+                var resultItemIds2 = items.filter(function (item) {
+
+                    if (item.SyncStatus && item.SyncStatus !== 'synced') {
+                        return false;
+                    }
+
+                    return resultItemIds.indexOf(item.Item.ParentId) >= 0;
+                }).map(function (item2) {
+
+                    return item2.Item.Id;
+
+                });
+
+                resultItemIds = resultItemIds.concat(resultItemIds2);
+            }
+
             var resultItems = [];
 
             items.forEach(function (item) {
                 var found = false;
 
-                resultItemIds.forEach(function (id) {
-                    if (item.Item.Id === id) {
-                        resultItems.push(item.Item);
-                    }
+                if (options.Filters === 'IsNotFolder' && item.Item.IsFolder) {
+                    // Ignore item
+                } else if (options.Filters === 'IsFolder' && !item.Item.IsFolder) {
+                    // Ignore item
+                } else {
+
+                    resultItemIds.forEach(function (id) {
+                        if (item.Item.Id === id) {
+                            resultItems.push(item.Item);
+                        }
+                    });
+                }
+            });
+
+            if (options.SortBy === 'DateCreated') {
+                resultItems.sort(function (a, b) { return compareDates(a.DateCreated, b.DateCreated); });
+            }
+
+            if (options.Limit) {
+                resultItems = resultItems.slice(0, options.Limit);
+            }
+
+            return Promise.resolve(resultItems);
+        });
+    }
+
+    function removeObsoleteContainerItems(serverId) {
+
+        return getServerItems(serverId).then(function (items) {
+
+            var seriesItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'series';
+            });
+
+
+            var seasonItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'season';
+            });
+
+            var albumItems = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'musicalbum' || type === 'photoalbum';
+            });
+
+            var requiredSeriesIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'episode';
+            }).map(function (item2) {
+
+                return item2.Item.SeriesId;
+            }).filter(filterDistinct);
+
+            var requiredSeasonIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'episode';
+            }).map(function (item2) {
+
+                return item2.Item.SeasonId;
+            }).filter(filterDistinct);
+
+            var requiredAlbumIds = items.filter(function (item) {
+
+                var type = (item.Item.Type || '').toLowerCase();
+                return type === 'audio' || type === 'photo';
+            }).map(function (item2) {
+
+                return item2.Item.AlbumId;
+            }).filter(filterDistinct);
+
+
+            var obsoleteItems = [];
+
+            seriesItems.forEach(function (item) {
+
+                if (requiredSeriesIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+            seasonItems.forEach(function (item) {
+
+                if (requiredSeasonIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+            albumItems.forEach(function (item) {
+
+                if (requiredAlbumIds.indexOf(item.Item.Id) < 0) {
+                    obsoleteItems.push(item);
+                }
+            });
+
+
+            var p = Promise.resolve();
+
+            obsoleteItems.forEach(function (item) {
+
+                p = p.then(function () {
+                    return itemrepository.remove(item.ServerId, item.Id);
                 });
             });
 
-            return Promise.resolve(resultItems);
+            return p;
         });
     }
 
 
     function removeLocalItem(localItem) {
 
-        return itemrepository.get(localItem.Id).then(function (item) {
+        return itemrepository.get(localItem.ServerId, localItem.Id).then(function (item) {
             return filerepository.deleteFile(item.LocalPath).then(function () {
 
                 var p = Promise.resolve(true);
@@ -278,7 +381,7 @@
                 }
 
                 return p.then(function (file) {
-                    return itemrepository.remove(localItem.Id);
+                    return itemrepository.remove(localItem.ServerId, localItem.Id);
                 });
 
             }, function (error) {
@@ -294,7 +397,7 @@
                 }
 
                 return p.then(function (file) {
-                    return itemrepository.remove(localItem.Id);
+                    return itemrepository.remove(localItem.ServerId, localItem.Id);
                 });
             });
         });
@@ -302,7 +405,7 @@
 
     function addOrUpdateLocalItem(localItem) {
         console.log('addOrUpdateLocalItem Start');
-        return itemrepository.set(localItem.Id, localItem).then(function (res) {
+        return itemrepository.set(localItem.ServerId, localItem.Id, localItem).then(function (res) {
             console.log('addOrUpdateLocalItem Success');
             return Promise.resolve(true);
         }, function (error) {
@@ -338,7 +441,8 @@
             ServerId: serverInfo.Id,
             LocalPath: localPath,
             LocalFolder: localFolder,
-            Id: getLocalId(serverInfo.Id, libraryItem.Id)
+            SyncDate: Date.now(),
+            Id: libraryItem.Id
         };
 
         if (jobItem) {
@@ -390,7 +494,8 @@
     function downloadFile(url, localItem) {
 
         var folder = filerepository.getLocalPath();
-        return transfermanager.downloadFile(url, folder, localItem);
+        var imageUrl = getImageUrl(localItem.Item.ServerId, localItem.Item.Id, 'Primary', 0);
+        return transfermanager.downloadFile(url, folder, localItem, imageUrl);
     }
 
     function downloadSubtitles(url, fileName) {
@@ -426,6 +531,10 @@
         }, function (err) {
             return Promise.resolve(false);
         });
+    }
+
+    function fileExists(localFilePath) {
+        return filerepository.fileExists(localFilePath);
     }
 
     function downloadImage(localItem, url, serverId, itemId, imageType, index) {
@@ -590,16 +699,42 @@
         return self.indexOf(value) === index;
     }
 
+    function compareDates(a, b) {
+        // Compare two dates (could be of any type supported by the convert
+        // function above) and returns:
+        //  -1 : if a < b
+        //   0 : if a = b
+        //   1 : if a > b
+        // NaN : if a or b is an illegal date
+        // NOTE: The code inside isFinite does an assignment (=).
+        return (
+            isFinite(a = a.valueOf()) &&
+            isFinite(b = b.valueOf()) ?
+            (a > b) - (a < b) :
+            NaN
+        );
+    }
+
+    function debugPrintItems(items) {
+
+        console.log("Current local items:");
+        console.group();
+
+        items.forEach(function (item) {
+            console.info("ID: %s Type: %s Name: %s", item.Item.Id, item.Item.Type, item.Item.Name);
+        });
+
+        console.groupEnd();
+    }
+
+
     return {
 
         getLocalItem: getLocalItem,
-        saveOfflineUser: saveOfflineUser,
-        deleteOfflineUser: deleteOfflineUser,
         recordUserAction: recordUserAction,
         getUserActions: getUserActions,
         deleteUserAction: deleteUserAction,
         deleteUserActions: deleteUserActions,
-        getServerItemIds: getServerItemIds,
         removeLocalItem: removeLocalItem,
         addOrUpdateLocalItem: addOrUpdateLocalItem,
         createLocalItem: createLocalItem,
@@ -610,7 +745,6 @@
         getImageUrl: getImageUrl,
         translateFilePath: translateFilePath,
         getSubtitleSaveFileName: getSubtitleSaveFileName,
-        getLocalItemById: getLocalItemById,
         getServerItems: getServerItems,
         getItemFileSize: getItemFileSize,
         isDownloadFileInQueue: isDownloadFileInQueue,
@@ -618,6 +752,8 @@
         getViews: getViews,
         getViewItems: getViewItems,
         resyncTransfers: resyncTransfers,
-        getItemsFromIds: getItemsFromIds
+        getItemsFromIds: getItemsFromIds,
+        removeObsoleteContainerItems: removeObsoleteContainerItems,
+        fileExists: fileExists
     };
 });

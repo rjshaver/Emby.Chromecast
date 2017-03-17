@@ -1,4 +1,4 @@
-﻿define(['itemShortcuts', 'connectionManager', 'layoutManager', 'browser', 'dom', 'loading', 'serverNotifications', 'events', 'registerElement'], function (itemShortcuts, connectionManager, layoutManager, browser, dom, loading, serverNotifications, events) {
+﻿define(['itemShortcuts', 'connectionManager', 'layoutManager', 'browser', 'dom', 'loading', 'focusManager', 'serverNotifications', 'events', 'registerElement'], function (itemShortcuts, connectionManager, layoutManager, browser, dom, loading, focusManager, serverNotifications, events) {
     'use strict';
 
     var ItemsContainerProtoType = Object.create(HTMLDivElement.prototype);
@@ -33,7 +33,8 @@
         var target = e.target;
         var card = dom.parentWithAttribute(target, 'data-id');
 
-        if (card) {
+        // check for serverId, it won't be present on selectserver
+        if (card && card.getAttribute('data-serverid')) {
 
             //var itemSelectionPanel = card.querySelector('.itemSelectionPanel');
 
@@ -251,6 +252,93 @@
         }
     }
 
+    function alphanumeric(value) {
+        var letterNumber = /^[0-9a-zA-Z]+$/;
+        return value.match(letterNumber);
+    }
+
+    function onKeyDown(e) {
+
+        var keyCode = e.keyCode;
+        var chrCode = keyCode - 48 * Math.floor(keyCode / 48);
+        chrCode = (96 <= keyCode) ? chrCode : keyCode;
+        var chr = String.fromCharCode(chrCode);
+
+        chr = alphanumeric(chr);
+
+        if (chr) {
+            currentDisplayTextContainer = this;
+            onAlphanumericKeyPress(e, chr);
+        }
+    }
+
+    var inputDisplayElement;
+    var currentDisplayText = '';
+    var currentDisplayTextContainer;
+    function ensureInputDisplayElement() {
+        if (!inputDisplayElement) {
+            inputDisplayElement = document.createElement('div');
+            inputDisplayElement.classList.add('alphanumeric-shortcut');
+            inputDisplayElement.classList.add('hide');
+
+            document.body.appendChild(inputDisplayElement);
+        }
+    }
+
+    var alpanumericShortcutTimeout;
+    function clearAlphaNumericShortcutTimeout() {
+        if (alpanumericShortcutTimeout) {
+            clearTimeout(alpanumericShortcutTimeout);
+            alpanumericShortcutTimeout = null;
+        }
+    }
+    function resetAlphaNumericShortcutTimeout() {
+        clearAlphaNumericShortcutTimeout();
+        alpanumericShortcutTimeout = setTimeout(onAlphanumericShortcutTimeout, 2000);
+    }
+
+    function onAlphanumericKeyPress(e, chr) {
+        if (currentDisplayText.length >= 3) {
+            return;
+        }
+        ensureInputDisplayElement();
+        currentDisplayText += chr;
+        inputDisplayElement.innerHTML = currentDisplayText;
+        inputDisplayElement.classList.remove('hide');
+        resetAlphaNumericShortcutTimeout();
+    }
+
+    function onAlphanumericShortcutTimeout() {
+        var value = currentDisplayText;
+        var container = currentDisplayTextContainer;
+
+        currentDisplayText = '';
+        currentDisplayTextContainer = null;
+        inputDisplayElement.innerHTML = '';
+        inputDisplayElement.classList.add('hide');
+        clearAlphaNumericShortcutTimeout();
+        selectByShortcutValue(container, value);
+    }
+
+    function selectByShortcutValue(container, value) {
+
+        value = value.toUpperCase();
+
+        var focusElem;
+        if (value === '#') {
+
+            focusElem = container.querySelector('*[data-prefix]');
+        }
+
+        if (!focusElem) {
+            focusElem = container.querySelector('*[data-prefix^=\'' + value + '\']');
+        }
+
+        if (focusElem) {
+            focusManager.focus(focusElem);
+        }
+    }
+
     ItemsContainerProtoType.createdCallback = function () {
 
         this.classList.add('itemsContainer');
@@ -268,12 +356,24 @@
             }
         }
 
-        if (layoutManager.desktop) {
+        if (this.getAttribute('data-alphanumericshortcuts') === 'true') {
+            dom.addEventListener(this, 'keydown', onKeyDown, {
+                passive: true
+            });
+        }
+
+        if (layoutManager.desktop && this.getAttribute('data-hovermenu') !== 'false') {
             this.enableHoverMenu(true);
         }
 
         if (layoutManager.desktop || layoutManager.mobile) {
-            this.enableMultiSelect(true);
+            if (this.getAttribute('data-multiselect') !== 'false') {
+                this.enableMultiSelect(true);
+            }
+        }
+
+        if (layoutManager.tv) {
+            this.classList.add('itemsContainer-tv');
         }
 
         itemShortcuts.on(this, getShortcutOptions());
@@ -290,6 +390,10 @@
     };
 
     ItemsContainerProtoType.detachedCallback = function () {
+
+        dom.removeEventListener(this, 'keydown', onKeyDown, {
+            passive: true
+        });
 
         this.enableHoverMenu(false);
         this.enableMultiSelect(false);

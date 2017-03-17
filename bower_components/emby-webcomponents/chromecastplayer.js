@@ -1,4 +1,4 @@
-﻿define(['appSettings', 'playbackManager', 'connectionManager', 'globalize', 'events'], function (appSettings, playbackManager, connectionManager, globalize, events) {
+﻿define(['appSettings', 'playbackManager', 'connectionManager', 'globalize', 'events', 'castSenderApiLoader'], function (appSettings, playbackManager, connectionManager, globalize, events, castSenderApiLoader) {
     'use strict';
 
     // Based on https://github.com/googlecast/CastVideos-chrome/blob/master/CastVideos.js
@@ -351,11 +351,13 @@
             receiverName = session.receiver.friendlyName;
         }
 
+        var apiClient = ApiClient;
+
         message = Object.assign(message, {
-            userId: ApiClient.getCurrentUserId(),
-            deviceId: ApiClient.deviceId(),
-            accessToken: ApiClient.accessToken(),
-            serverAddress: ApiClient.serverAddress(),
+            userId: apiClient.getCurrentUserId(),
+            deviceId: apiClient.deviceId(),
+            accessToken: apiClient.accessToken(),
+            serverAddress: apiClient.serverAddress(),
             receiverName: receiverName
         });
 
@@ -368,7 +370,7 @@
 
             require(['chromecasthelpers'], function (chromecasthelpers) {
 
-                chromecasthelpers.getServerAddress(ApiClient).then(function (serverAddress) {
+                chromecasthelpers.getServerAddress(apiClient).then(function (serverAddress) {
                     message.serverAddress = serverAddress;
                     player.sendMessageInternal(message).then(resolve, reject);
 
@@ -474,10 +476,11 @@
 
         self.getItemsForPlayback = function (query) {
 
-            var userId = ApiClient.getCurrentUserId();
+            var apiClient = ApiClient;
+            var userId = apiClient.getCurrentUserId();
 
             if (query.Ids && query.Ids.split(',').length === 1) {
-                return ApiClient.getItem(userId, query.Ids.split(',')).then(function (item) {
+                return apiClient.getItem(userId, query.Ids.split(',')).then(function (item) {
                     return {
                         Items: [item],
                         TotalRecordCount: 1
@@ -489,13 +492,12 @@
                 query.Limit = query.Limit || 100;
                 query.ExcludeLocationTypes = "Virtual";
 
-                return ApiClient.getItems(userId, query);
+                return apiClient.getItems(userId, query);
             }
         };
 
         function initializeChromecast() {
 
-            fileref.loaded = true;
             castPlayer = new CastPlayer();
 
             // To allow the native android app to override
@@ -572,28 +574,23 @@
 
         self.play = function (options) {
 
-            return ApiClient.getCurrentUser().then(function (user) {
+            if (options.items) {
 
-                if (options.items) {
+                return self.playWithCommand(options, 'PlayNow');
 
+            } else {
+
+                return self.getItemsForPlayback({
+
+                    Ids: options.ids.join(',')
+
+                }).then(function (result) {
+
+                    options.items = result.Items;
                     return self.playWithCommand(options, 'PlayNow');
 
-                } else {
-
-                    return self.getItemsForPlayback({
-
-                        Ids: options.ids.join(',')
-
-                    }).then(function (result) {
-
-                        options.items = result.Items;
-                        return self.playWithCommand(options, 'PlayNow');
-
-                    });
-                }
-
-            });
-
+                });
+            }
         };
 
         self.playWithCommand = function (options, command) {
@@ -1064,20 +1061,8 @@
             }
         };
 
-        if (fileref.loaded) {
-            initializeChromecast();
-        } else {
-            fileref.onload = initializeChromecast;
-        }
+        castSenderApiLoader.load().then(initializeChromecast);
     }
-
-    var fileref = document.createElement('script');
-    fileref.setAttribute("type", "text/javascript");
-    fileref.onload = function () {
-        fileref.loaded = true;
-    };
-    fileref.setAttribute("src", "https://www.gstatic.com/cv/js/sender/v1/cast_sender.js");
-    document.querySelector('head').appendChild(fileref);
 
     return chromecastPlayer;
 });

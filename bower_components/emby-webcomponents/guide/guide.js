@@ -1,4 +1,4 @@
-﻿define(['require', 'browser', 'globalize', 'connectionManager', 'serverNotifications', 'loading', 'datetime', 'focusManager', 'userSettings', 'imageLoader', 'events', 'layoutManager', 'itemShortcuts', 'registrationServices', 'dom', 'clearButtonStyle', 'css!./guide.css', 'programStyles', 'material-icons', 'scrollStyles', 'emby-button', 'paper-icon-button-light', 'emby-tabs'], function (require, browser, globalize, connectionManager, serverNotifications, loading, datetime, focusManager, userSettings, imageLoader, events, layoutManager, itemShortcuts, registrationServices, dom) {
+﻿define(['require', 'browser', 'globalize', 'connectionManager', 'serverNotifications', 'loading', 'datetime', 'focusManager', 'userSettings', 'imageLoader', 'events', 'layoutManager', 'itemShortcuts', 'registrationServices', 'dom', 'clearButtonStyle', 'css!./guide.css', 'programStyles', 'material-icons', 'scrollStyles', 'emby-button', 'paper-icon-button-light', 'emby-tabs', 'emby-scroller', 'flexStyles'], function (require, browser, globalize, connectionManager, serverNotifications, loading, datetime, focusManager, userSettings, imageLoader, events, layoutManager, itemShortcuts, registrationServices, dom) {
     'use strict';
 
     function showViewSettings(instance) {
@@ -606,7 +606,7 @@
                 if (hasChannelImage) {
 
                     var url = apiClient.getScaledImageUrl(channel.Id, {
-                        maxHeight: 200,
+                        maxHeight: 220,
                         tag: channel.ImageTags.Primary,
                         type: "Primary"
                     });
@@ -622,9 +622,10 @@
 
                 html += '<button type="button" class="' + cssClass + '"' + dataSrc + ' data-action="link" data-isfolder="' + channel.IsFolder + '" data-id="' + channel.Id + '" data-serverid="' + channel.ServerId + '" data-type="' + channel.Type + '">';
 
-                cssClass = 'guideChannelNumber';
-
-                html += '<h3 class="' + cssClass + '">' + channel.Number + '</h3>';
+                if (channel.Number) {
+                    
+                    html += '<h3 class="guideChannelNumber">' + channel.Number + '</h3>';
+                }
 
                 if (!hasChannelImage && channel.Name) {
                     html += '<div class="guideChannelName">' + channel.Name + '</div>';
@@ -842,7 +843,6 @@
                 require(['scrollHelper'], function (scrollHelper) {
 
                     var fn = enabled ? 'on' : 'off';
-                    scrollHelper.centerFocus[fn](view.querySelector('.guideVerticalScroller'), false);
                     scrollHelper.centerFocus[fn](view.querySelector('.programGrid'), true);
                 });
             }
@@ -922,7 +922,11 @@
         }
 
         require(['text!./tvguide.template.html'], function (template) {
+
             var context = options.element;
+
+            context.classList.add('tvguide');
+
             context.innerHTML = globalize.translateDocument(template, 'sharedcomponents');
 
             if (layoutManager.desktop) {
@@ -935,16 +939,14 @@
             var programGrid = context.querySelector('.programGrid');
             var timeslotHeaders = context.querySelector('.timeslotHeaders');
 
-            programGrid.addEventListener('focus', onProgramGridFocus, true);
+            if (layoutManager.tv) {
+                programGrid.addEventListener('focus', onProgramGridFocus, true);
+            }
 
             if (browser.iOS || browser.osx) {
                 context.querySelector('.channelsContainer').classList.add('noRubberBanding');
 
-                var programGridContainer = context.querySelector('.programGridContainer');
-
-                programGridContainer.classList.add('noRubberBanding');
-                programGridContainer.classList.remove('smoothScrollX');
-                programGridContainer.classList.add('hiddenScrollX');
+                programGrid.classList.add('noRubberBanding');
             }
 
             dom.addEventListener(programGrid, 'scroll', function (e) {
@@ -991,8 +993,6 @@
                     changeDate(context, date, false);
                 }
             });
-
-            context.classList.add('tvguide');
 
             setScrollEvents(context, true);
             itemShortcuts.on(context);

@@ -236,7 +236,8 @@ define(['playbackManager', 'inputManager', 'connectionManager', 'embyRouter', 'g
         if (action === 'link') {
 
             showItem(item, {
-                context: card.getAttribute('data-context')
+                context: card.getAttribute('data-context'),
+                parentId: card.getAttribute('data-parentid')
             });
         }
 
@@ -399,7 +400,7 @@ define(['playbackManager', 'inputManager', 'connectionManager', 'embyRouter', 'g
         if (type === 'Program' || timerId || seriesTimerId) {
 
             var programId = type === 'Program' ? id : null;
-            recordingHelper.toggle(serverId, programId, timerId, seriesTimerId);
+            recordingHelper.toggleRecording(serverId, programId, timerId, seriesTimerId);
         }
     }
 

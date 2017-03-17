@@ -5,96 +5,9 @@
     var buttonClass = 'emby-tab-button';
     var activeButtonClass = buttonClass + '-active';
 
-    function getBoundingClientRect(elem) {
+    function setActiveTabButton(tabs, newButton, oldButton, animate) {
 
-        // Support: BlackBerry 5, iOS 3 (original iPhone)
-        // If we don't have gBCR, just use 0,0 rather than error
-        if (elem.getBoundingClientRect) {
-            return elem.getBoundingClientRect();
-        } else {
-            return { top: 0, left: 0 };
-        }
-    }
-
-    function animtateSelectionBar(bar, start, pos, duration, onFinish) {
-
-        var endTransform = pos ? ('translateX(' + Math.round(pos) + 'px)') : 'none';
-        var startTransform = start ? ('translateX(' + Math.round(start) + 'px)') : 'none';
-
-        if (!duration || !bar.animate) {
-            bar.style.transform = endTransform;
-            if (onFinish) {
-                onFinish();
-            }
-            return;
-        }
-
-        bar.style.transform = startTransform;
-
-        var keyframes = [
-          { transform: 'translateX(' + start + 'px)', offset: 0 },
-          { transform: endTransform, offset: 1 }];
-
-        bar.animate(keyframes, {
-            duration: duration,
-            iterations: 1,
-            easing: 'linear',
-            fill: 'forwards'
-        });
-
-        // for some reason onFinish is not firing. temporary browser issue?
-        setTimeout(onFinish, duration);
-    }
-
-    function moveSelectionBar(tabs, newButton, oldButton, animate) {
-
-        var selectionBar = tabs.selectionBar;
-
-        if (selectionBar) {
-            selectionBar.style.width = newButton.offsetWidth + 'px';
-            selectionBar.classList.remove('hide');
-        }
-
-        var tabsOffset = getBoundingClientRect(tabs);
-        var startOffset = tabs.currentOffset || 0;
-
-        if (oldButton) {
-            if (tabs.scroller) {
-                startOffset = tabs.scroller.getCenterPosition(oldButton);
-            } else {
-                startOffset = getBoundingClientRect(oldButton).left - tabsOffset.left;
-            }
-        }
-
-        var endPosition;
-        if (tabs.scroller) {
-            endPosition = tabs.scroller.getCenterPosition(newButton);
-        } else {
-            var tabButtonOffset = getBoundingClientRect(newButton);
-            endPosition = tabButtonOffset.left - tabsOffset.left;
-        }
-
-        var delay = animate ? 100 : 0;
-        tabs.currentOffset = endPosition;
-
-        var onAnimationFinish = function () {
-
-            //if (tabs.getAttribute('data-selectionbar') !== 'false') {
-            //    showButtonSelectionBar(newButton);
-            //}
-            newButton.classList.add(activeButtonClass);
-
-            if (selectionBar) {
-                selectionBar.classList.add('hide');
-            }
-
-        };
-
-        if (selectionBar) {
-            animtateSelectionBar(selectionBar, startOffset, endPosition, delay, onAnimationFinish);
-        } else {
-            onAnimationFinish();
-        }
+        newButton.classList.add(activeButtonClass);
     }
 
     function getFocusCallback(tabs, e) {
@@ -114,7 +27,72 @@
         }
     }
 
+    function getTabPanel(tabs, index) {
+
+        var tabsContainer = dom.parentWithClass(tabs, 'tabs-container');
+        if (tabsContainer) {
+            return tabsContainer.querySelector('.tabContent[data-index="' + index + '"]');
+        }
+    }
+
+    function removeActivePanelClass(tabs, index) {
+        var tabPanel = getTabPanel(tabs, index);
+        if (tabPanel) {
+            tabPanel.classList.remove('is-active');
+        }
+    }
+
+    function addActivePanelClass(tabs, index) {
+        var tabPanel = getTabPanel(tabs, index);
+        if (tabPanel) {
+            tabPanel.classList.add('is-active');
+        }
+    }
+
+    function fadeInRight(elem) {
+
+        var pct = browser.mobile ? '4%' : '0.5%';
+
+        var keyframes = [
+          { opacity: '0', transform: 'translate3d(' + pct + ', 0, 0)', offset: 0 },
+          { opacity: '1', transform: 'none', offset: 1 }];
+
+        elem.animate(keyframes, {
+            duration: 160,
+            iterations: 1,
+            easing: 'ease-out'
+        });
+    }
+
+    function triggerBeforeTabChange(tabs, index, previousIndex) {
+
+        tabs.dispatchEvent(new CustomEvent("beforetabchange", {
+            detail: {
+                selectedTabIndex: index,
+                previousIndex: previousIndex
+            }
+        }));
+        if (previousIndex != null && previousIndex !== index) {
+            removeActivePanelClass(tabs, previousIndex);
+        }
+
+        var newPanel = getTabPanel(tabs, index);
+
+        if (newPanel) {
+            // animate new panel ?
+            if (newPanel.animate) {
+                fadeInRight(newPanel);
+            }
+
+            newPanel.classList.add('is-active');
+        }
+    }
+
     function onClick(e) {
+
+        if (this.focusTimeout) {
+            clearTimeout(this.focusTimeout);
+        }
 
         var tabs = this;
 
@@ -129,15 +107,11 @@
 
             var previousIndex = current ? parseInt(current.getAttribute('data-index')) : null;
 
-            moveSelectionBar(tabs, tabButton, current, true);
+            setActiveTabButton(tabs, tabButton, current, true);
+
             var index = parseInt(tabButton.getAttribute('data-index'));
 
-            tabs.dispatchEvent(new CustomEvent("beforetabchange", {
-                detail: {
-                    selectedTabIndex: index,
-                    previousIndex: previousIndex
-                }
-            }));
+            triggerBeforeTabChange(tabs, index, previousIndex);
 
             // If toCenter is called syncronously within the click event, it sometimes ends up canceling it
             setTimeout(function () {
@@ -192,29 +166,6 @@
         }
     }
 
-    function initSelectionBar(tabs) {
-
-        if (!browser.animate) {
-            return;
-        }
-
-        var contentScrollSlider = tabs.querySelector('.emby-tabs-slider');
-
-        if (!contentScrollSlider) {
-            return;
-        }
-
-        if (tabs.getAttribute('data-selectionbar') === 'false') {
-            return;
-        }
-
-        var elem = document.createElement('div');
-        elem.classList.add('emby-tabs-selection-bar');
-
-        contentScrollSlider.appendChild(elem);
-        tabs.selectionBar = elem;
-    }
-
     EmbyTabs.createdCallback = function () {
 
         if (this.classList.contains('emby-tabs')) {
@@ -230,8 +181,6 @@
             passive: true,
             capture: true
         });
-
-        initSelectionBar(this);
     };
 
     EmbyTabs.focus = function () {
@@ -257,12 +206,17 @@
         initScroller(this);
 
         var current = this.querySelector('.' + activeButtonClass);
-        var currentIndex = current ? parseInt(current.getAttribute('data-index')) : 0;
+        var currentIndex = current ? parseInt(current.getAttribute('data-index')) : parseInt(this.getAttribute('data-index') || '1');
 
-        var newTabButton = this.querySelectorAll('.' + buttonClass)[currentIndex];
+        if (currentIndex !== -1) {
 
-        if (newTabButton) {
-            moveSelectionBar(this, newTabButton, current, false);
+            var tabButtons = this.querySelectorAll('.' + buttonClass);
+
+            var newTabButton = tabButtons[currentIndex];
+
+            if (newTabButton) {
+                setActiveTabButton(this, newTabButton, current, false);
+            }
         }
     };
 
@@ -280,7 +234,6 @@
             passive: true,
             capture: true
         });
-        this.selectionBar = null;
     };
 
     EmbyTabs.selectedIndex = function (selected, triggerEvent) {
@@ -300,11 +253,8 @@
 
         if (current === selected || triggerEvent === false) {
 
-            tabs.dispatchEvent(new CustomEvent("beforetabchange", {
-                detail: {
-                    selectedTabIndex: selected
-                }
-            }));
+            triggerBeforeTabChange(tabs, selected, current);
+
             tabs.dispatchEvent(new CustomEvent("tabchange", {
                 detail: {
                     selectedTabIndex: selected
@@ -312,14 +262,18 @@
             }));
 
             var currentTabButton = tabButtons[current];
-            moveSelectionBar(tabs, tabButtons[selected], currentTabButton, false);
+            setActiveTabButton(tabs, tabButtons[selected], currentTabButton, false);
 
             if (current !== selected && currentTabButton) {
                 currentTabButton.classList.remove(activeButtonClass);
             }
 
         } else {
-            tabButtons[selected].click();
+
+            onClick.call(tabs, {
+                target: tabButtons[selected]
+            });
+            //tabButtons[selected].click();
         }
     };
 
@@ -327,11 +281,7 @@
 
         var tabs = this;
 
-        tabs.dispatchEvent(new CustomEvent("beforetabchange", {
-            detail: {
-                selectedTabIndex: tabs.selectedIndex()
-            }
-        }));
+        triggerBeforeTabChange(tabs, tabs.selectedIndex());
     };
 
     EmbyTabs.triggerTabChange = function (selected) {

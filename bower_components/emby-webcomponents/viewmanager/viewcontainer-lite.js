@@ -1,4 +1,4 @@
-define(['browser', 'dom', 'css!./viewcontainer-lite'], function (browser, dom) {
+define(['browser', 'dom', 'layoutManager', 'css!./viewcontainer-lite'], function (browser, dom, layoutManager) {
     'use strict';
 
     var mainAnimatedPages = document.querySelector('.mainAnimatedPages');
@@ -115,10 +115,19 @@ define(['browser', 'dom', 'css!./viewcontainer-lite'], function (browser, dom) {
                 return slide(newAnimatedPage, oldAnimatedPage, transition, isBack);
             } else if (transition === 'fade') {
                 return fade(newAnimatedPage, oldAnimatedPage, transition, isBack);
+            } else {
+                clearAnimation(newAnimatedPage);
+                if (oldAnimatedPage) {
+                    clearAnimation(oldAnimatedPage);
+                }
             }
         }
 
         return Promise.resolve();
+    }
+
+    function clearAnimation(elem) {
+        setAnimation(elem, 'none');
     }
 
     function slide(newAnimatedPage, oldAnimatedPage, transition, isBack) {
@@ -164,16 +173,17 @@ define(['browser', 'dom', 'css!./viewcontainer-lite'], function (browser, dom) {
 
         return new Promise(function (resolve, reject) {
 
-            var duration = 400;
+            var duration = layoutManager.tv ? 450 : 160;
             var animations = [];
+
+            newAnimatedPage.style.opacity = 0;
+            setAnimation(newAnimatedPage, 'view-fadein ' + duration + 'ms ease-in normal both');
+            animations.push(newAnimatedPage);
 
             if (oldAnimatedPage) {
                 setAnimation(oldAnimatedPage, 'view-fadeout ' + duration + 'ms ease-out normal both');
                 animations.push(oldAnimatedPage);
             }
-
-            setAnimation(newAnimatedPage, 'view-fadein ' + duration + 'ms ease-in normal both');
-            animations.push(newAnimatedPage);
 
             currentAnimations = animations;
 

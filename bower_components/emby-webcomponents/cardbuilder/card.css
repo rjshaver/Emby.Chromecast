@@ -71,23 +71,28 @@ button {
 
 .cardBox {
     padding: 0 !important;
-    margin: 2px;
+    margin: .427em;
     transition: none;
-    border: 3px solid transparent;
-    /* Needed in case cardBox is a button */
+    border: 0 solid transparent;
+    /* These both are needed in case cardBox is a button */
     background-color: transparent;
+    outline: none !important;
+}
+
+.layout-tv .cardBox {
+    margin: .5em;
+}
+
+.card-focuscontent {
+    border: .12em solid transparent;
 }
 
 .cardBox-focustransform {
     will-change: transform;
-}
-
-.cardBox-focustransform-transition {
-    will-change: transform;
     transition: transform 200ms ease-out;
 }
 
-.card-focusscale:focus > .cardBox-focustransform {
+.card:focus > .cardBox-focustransform {
     transform: scale(1.16, 1.16);
 }
 
@@ -97,12 +102,8 @@ button {
     font-weight: inherit !important;
 }
 
-    .card:focus .cardBox {
-        border-color: transparent;
-    }
-
 .cardBox-bottompadded {
-    margin-bottom: 1em;
+    margin-bottom: 1.2em !important;
 }
 
 .btnCardOptions {
@@ -139,7 +140,7 @@ button {
     justify-content: center;
     position: relative;
     background-clip: content-box !important;
-    color: #fff;
+    color: inherit;
     /* This is only needed for scalable cards */
     height: 100%;
 }
@@ -220,13 +221,14 @@ button {
     position: relative;
 }
 
-.visualCardBox-cardScalable, .visualCardBox-cardFooter {
-    background-color: #222326;
-}
+    .cardFooter.transparent {
+        padding-top: .2em;
+    }
 
-.visualCardBox-cardFooter {
-    border-bottom-left-radius: 1px;
-    border-bottom-right-radius: 1px;
+.visualCardBox {
+    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12), 0 3px 1px -2px rgba(0, 0, 0, 0.2);
+    background-color: #222326;
+    border-radius: 2px;
 }
 
 .innerCardFooter {
@@ -250,12 +252,21 @@ button {
 }
 
 .cardText {
-    padding: .35em .5em;
+    padding: .3em .5em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     color: inherit;
     text-align: left;
+}
+
+.layout-tv .cardText {
+    padding: .1em .5em;
+    font-size: 90%;
+}
+
+.innerCardFooter > .cardText {
+    padding: .3em .5em;
 }
 
 .singleCardText {
@@ -267,7 +278,8 @@ button {
 }
 
 .cardText-secondary {
-    opacity: .6;
+    opacity: .5;
+    font-size: 90%;
 }
 
 .cardText-rightmargin {
@@ -305,10 +317,10 @@ button {
 }
 
 .cardImageIcon {
-    width: 12vh;
-    height: 12vh;
-    font-size: 12vh;
-    color: #fff;
+    width: auto;
+    height: auto;
+    font-size: 5em;
+    color: inherit;
 }
 
 .cardIndicators {
@@ -339,13 +351,7 @@ button {
     margin: 0 .35em .5em 0;
     z-index: 1;
     padding: 6px;
-    /*opacity: 0;
-    transition: opacity 0.5s ease-in;  */
 }
-
-    /*.card:hover .cardOverlayButton {
-    opacity: 1;
-}*/
 
     .cardOverlayButton:hover {
         background-color: rgba(0,0,0,.9) !important;
@@ -393,13 +399,11 @@ button {
 }
 
 .overflowPortraitCard-scalable {
-    width: 42%;
-    max-width: 200px;
+    width: 42vw;
 }
 
 .overflowBackdropCard-scalable {
-    width: 72%;
-    max-width: 400px;
+    width: 72vw;
 }
 
 .overflowSmallBackdropCard-scalable {
@@ -407,8 +411,7 @@ button {
 }
 
 .overflowSquareCard-scalable {
-    width: 42%;
-    max-width: 200px;
+    width: 42vw;
 }
 
 @media all and (min-width: 400px) {
@@ -432,19 +435,19 @@ button {
 @media all and (min-width: 540px) {
 
     .overflowPortraitCard-scalable {
-        width: 30%;
+        width: 30vw;
     }
 
     .overflowBackdropCard-scalable {
-        width: 64%;
+        width: 64vw;
     }
 
     .overflowSquareCard-scalable {
-        width: 30%;
+        width: 30vw;
     }
 
     .overflowSmallBackdropCard-scalable {
-        width: 40%
+        width: 40%;
     }
 }
 
@@ -455,11 +458,11 @@ button {
     }
 
     .overflowBackdropCard-scalable {
-        width: 56%;
+        width: 56vw;
     }
 
     .overflowSmallBackdropCard-scalable {
-        width: 40%
+        width: 40%;
     }
 }
 
@@ -475,7 +478,7 @@ button {
     }
 
     .overflowSmallBackdropCard-scalable {
-        width: 30%
+        width: 30%;
     }
 }
 
@@ -510,19 +513,19 @@ button {
     }
 
     .overflowPortraitCard-scalable {
-        width: 22%;
+        width: 22vw;
     }
 
     .overflowBackdropCard-scalable {
-        width: 40%;
+        width: 40vw;
     }
 
     .overflowSmallBackdropCard-scalable {
-        width: 24%
+        width: 24%;
     }
 
     .overflowSquareCard-scalable {
-        width: 22%;
+        width: 22vw;
     }
 }
 
@@ -549,7 +552,15 @@ button {
     }
 
     .overflowSmallBackdropCard-scalable {
-        width: 18%
+        width: 18%;
+    }
+
+    .overflowPortraitCard-scalable {
+        width: 18vw;
+    }
+
+    .overflowSquareCard-scalable {
+        width: 18vw;
     }
 }
 
@@ -566,6 +577,18 @@ button {
 
     .smallBackdropCard-scalable {
         width: 14.285714285714285714285714285714%;
+    }
+
+    .overflowPortraitCard-scalable {
+        width: 15vw;
+    }
+
+    .overflowSquareCard-scalable {
+        width: 15vw;
+    }
+
+    .overflowBackdropCard-scalable {
+        width: 30vw;
     }
 }
 
@@ -592,6 +615,10 @@ button {
 
     .smallBackdropCard-scalable {
         width: 10%;
+    }
+
+    .overflowBackdropCard-scalable {
+        width: 23.5vw;
     }
 }
 
@@ -635,22 +662,26 @@ button {
     }
 }
 
-.layout-tv .backdropCard-scalable {
+.itemsContainer-tv > .backdropCard-scalable {
     width: 25%;
 }
 
-.layout-tv .squareCard-scalable {
-    width: 16.66666666666666667%;
+.itemsContainer-tv > .squareCard-scalable {
+    width: 16.666666666666666666666666666667%;
 }
 
-.layout-tv .portraitCard-scalable {
-    width: 16.66666666666666667%;
+.itemsContainer-tv > .portraitCard-scalable {
+    width: 16.666666666666666666666666666667%;
 }
 
+.itemsContainer-tv > .overflowSmallBackdropCard-scalable {
+    width: 18vw;
+}
 
-@media all and (min-width: 1600px) {
+.itemsContainer-tv > .overflowBackdropCard-scalable {
+    width: 23vw;
+}
 
-    .layout-tv .backdropCard-scalable {
-        width: 25%;
-    }
+.itemsContainer-tv > .overflowSquareCard-scalable, .itemsContainer-tv > .overflowPortraitCard-scalable {
+    width: 14.9vw;
 }
