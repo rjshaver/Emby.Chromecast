@@ -364,26 +364,26 @@
         var backdropUrl = '';
 
         if (data.BackdropImageTags && data.BackdropImageTags.length) {
-            backdropUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.Id + '/Images/Backdrop/0?tag=' + data.BackdropImageTags[0];
+            backdropUrl = $scope.serverAddress + '/emby/Items/' + data.Id + '/Images/Backdrop/0?tag=' + data.BackdropImageTags[0];
         } else {
             if (data.ParentBackdropItemId && data.ParentBackdropImageTags && data.ParentBackdropImageTags.length) {
-                backdropUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.ParentBackdropItemId + '/Images/Backdrop/0?tag=' + data.ParentBackdropImageTags[0];
+                backdropUrl = $scope.serverAddress + '/emby/Items/' + data.ParentBackdropItemId + '/Images/Backdrop/0?tag=' + data.ParentBackdropImageTags[0];
             }
         }
 
         var posterUrl = '';
 
         if (isSeries && data.SeriesPrimaryImageTag) {
-            posterUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.SeriesId + '/Images/Primary?tag=' + data.SeriesPrimaryImageTag;
+            posterUrl = $scope.serverAddress + '/emby/Items/' + data.SeriesId + '/Images/Primary?tag=' + data.SeriesPrimaryImageTag;
         }
         else if (data.AlbumPrimaryImageTag) {
-            posterUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.AlbumId + '/Images/Primary?tag=' + (data.AlbumPrimaryImageTag);
+            posterUrl = $scope.serverAddress + '/emby/Items/' + data.AlbumId + '/Images/Primary?tag=' + (data.AlbumPrimaryImageTag);
         }
         else if (data.PrimaryImageTag) {
-            posterUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.Id + '/Images/Primary?tag=' + (data.PrimaryImageTag);
+            posterUrl = $scope.serverAddress + '/emby/Items/' + data.Id + '/Images/Primary?tag=' + (data.PrimaryImageTag);
         }
         else if (data.ImageTags.Primary) {
-            posterUrl = $scope.serverAddress + '/mediabrowser/Items/' + data.Id + '/Images/Primary?tag=' + (data.ImageTags.Primary);
+            posterUrl = $scope.serverAddress + '/emby/Items/' + data.Id + '/Images/Primary?tag=' + (data.ImageTags.Primary);
         }
 
         setPoster(posterUrl);
