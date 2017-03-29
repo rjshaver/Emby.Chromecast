@@ -1,27 +1,29 @@
-﻿define(['globalize', 'loading', 'connectionManager'], function (globalize, loading, connectionManager) {
+﻿define(['globalize', 'loading', 'connectionManager', 'registrationServices'], function (globalize, loading, connectionManager, registrationServices) {
     'use strict';
 
-    function changeRecordingToSeries(apiClient, timerId, programId) {
+    function changeRecordingToSeries(apiClient, timerId, programId, confirmTimerCancellation) {
 
         loading.show();
 
-        apiClient.getItem(apiClient.getCurrentUserId(), programId).then(function (item) {
+        return apiClient.getItem(apiClient.getCurrentUserId(), programId).then(function (item) {
 
             if (item.IsSeries) {
-                // cancel, then create series
-                cancelTimer(apiClient, timerId, false).then(function () {
-                    apiClient.getNewLiveTvTimerDefaults({ programId: programId }).then(function (timerDefaults) {
+                // create series
+                return apiClient.getNewLiveTvTimerDefaults({ programId: programId }).then(function (timerDefaults) {
 
-                        apiClient.createLiveTvSeriesTimer(timerDefaults).then(function () {
+                    return apiClient.createLiveTvSeriesTimer(timerDefaults).then(function () {
 
-                            loading.hide();
-                            sendToast(globalize.translate('sharedcomponents#SeriesRecordingScheduled'));
-                        });
+                        loading.hide();
+                        sendToast(globalize.translate('sharedcomponents#SeriesRecordingScheduled'));
                     });
                 });
             } else {
                 // cancel 
-                cancelTimer(apiClient, timerId, true);
+                if (confirmTimerCancellation) {
+                    return cancelTimerWithConfirmation(timerId, apiClient.serverId());
+                }
+
+                return cancelTimer(apiClient.serverId(), timerId, true);
             }
         });
     }
@@ -44,15 +46,7 @@
                     loading.show();
 
                     var apiClient = connectionManager.getApiClient(serverId);
-                    apiClient.cancelLiveTvTimer(timerId).then(function () {
-
-                        require(['toast'], function (toast) {
-                            toast(globalize.translate('sharedcomponents#RecordingCancelled'));
-                        });
-
-                        loading.hide();
-                        resolve();
-                    }, reject);
+                    cancelTimer(apiClient, timerId, true).then(resolve, reject);
 
                 }, reject);
             });
@@ -108,7 +102,7 @@
         loading.show();
         return apiClient.getNewLiveTvTimerDefaults({ programId: programId }).then(function (item) {
 
-            var promise = isSeries ?
+            var promise = isSeries && item.IsSeries ?
                 apiClient.createLiveTvSeriesTimer(item) :
                 apiClient.createLiveTvTimer(item);
 
@@ -126,29 +120,92 @@
         });
     }
 
+    function showMultiCancellationPrompt(serverId, programId, timerId, timerStatus, seriesTimerId) {
+        return new Promise(function (resolve, reject) {
+
+            require(['dialog'], function (dialog) {
+
+                var items = [];
+
+                items.push({
+                    name: globalize.translate('sharedcomponents#HeaderKeepRecording'),
+                    id: 'cancel',
+                    type: 'submit'
+                });
+
+                items.push({
+                    name: globalize.translate('sharedcomponents#HeaderCancelRecording'),
+                    id: 'canceltimer',
+                    type: 'cancel'
+                });
+
+                items.push({
+                    name: globalize.translate('sharedcomponents#HeaderCancelSeries'),
+                    id: 'cancelseriestimer',
+                    type: 'cancel'
+                });
+
+                dialog({
+
+                    text: globalize.translate('sharedcomponents#MessageConfirmRecordingCancellation'),
+                    buttons: items
+
+                }).then(function (result) {
+
+                    var apiClient = connectionManager.getApiClient(serverId);
+
+                    if (result === 'canceltimer') {
+                        loading.show();
+
+                        cancelTimer(apiClient, timerId, true).then(resolve, reject);
+                    }
+                    else if (result === 'cancelseriestimer') {
+
+                        loading.show();
+
+                        apiClient.cancelLiveTvSeriesTimer(seriesTimerId).then(function () {
+
+                            require(['toast'], function (toast) {
+                                toast(globalize.translate('sharedcomponents#SeriesCancelled'));
+                            });
+
+                            loading.hide();
+                            resolve();
+                        }, reject);
+                    } else {
+                        resolve();
+                    }
+
+                }, reject);
+            });
+        });
+    }
+
     function toggleRecording(serverId, programId, timerId, timerStatus, seriesTimerId) {
 
-        var apiClient = connectionManager.getApiClient(serverId);
+        return registrationServices.validateFeature('dvr').then(function() {
+            var apiClient = connectionManager.getApiClient(serverId);
 
-        var hasTimer = timerId && timerStatus !== 'Cancelled';
+            var hasTimer = timerId && timerStatus !== 'Cancelled';
 
-        if (seriesTimerId && hasTimer) {
+            if (seriesTimerId && hasTimer) {
 
-            // cancel 
-            return cancelTimer(apiClient, timerId, true);
+                // cancel 
+                return showMultiCancellationPrompt(serverId, programId, timerId, timerStatus, seriesTimerId);
 
-        } else if (hasTimer && programId) {
+            } else if (hasTimer && programId) {
 
-            // change to series recording, if possible
-            // otherwise cancel individual recording
-            return changeRecordingToSeries(apiClient, timerId, programId);
+                // change to series recording, if possible
+                // otherwise cancel individual recording
+                return changeRecordingToSeries(apiClient, timerId, programId, true);
 
-        } else if (programId) {
-            // schedule recording
-            return createRecording(apiClient, programId);
-        } else {
-            return Promise.reject();
-        }
+            } else if (programId) {
+                // schedule recording
+                return createRecording(apiClient, programId);
+            } else {
+                return Promise.reject();
+            }
+        });
     }
 
     return {
