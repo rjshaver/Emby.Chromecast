@@ -700,7 +700,7 @@
 
                 if (validatePlaybackInfoResult(result)) {
 
-                    var mediaSource = getOptimalMediaSource(item.MediaType, result.MediaSources, item.serverAddress);
+                    var mediaSource = getOptimalMediaSource(item.MediaType, result.MediaSources, item.serverAddress, item.Type);
 
                     if (mediaSource) {
 
@@ -708,7 +708,7 @@
 
                             embyActions.getLiveStream(item, result.PlaySessionId, maxBitrate, deviceProfile, options.startPositionTicks, mediaSource, null, null).then(function (openLiveStreamResult) {
 
-                                openLiveStreamResult.MediaSource.enableDirectPlay = supportsDirectPlay(openLiveStreamResult.MediaSource, item.serverAddress);
+                                openLiveStreamResult.MediaSource.enableDirectPlay = supportsDirectPlay(openLiveStreamResult.MediaSource, item.serverAddress, item.Type);
                                 playMediaSource(result.PlaySessionId, item, openLiveStreamResult.MediaSource, options);
                             });
 
@@ -788,11 +788,11 @@
         });
     }
 
-    function getOptimalMediaSource(mediaType, versions, serverAddress) {
+    function getOptimalMediaSource(mediaType, versions, serverAddress, itemType) {
 
         var optimalVersion = versions.filter(function (v) {
 
-            v.enableDirectPlay = supportsDirectPlay(v, serverAddress);
+            v.enableDirectPlay = supportsDirectPlay(v, serverAddress, itemType);
 
             return v.enableDirectPlay;
 
@@ -829,20 +829,27 @@
         return false;
     }
 
-    function supportsDirectPlay(mediaSource, serverAddress) {
+    function supportsDirectPlay(mediaSource, serverAddress, itemType) {
 
-        if (mediaSource.Protocol === 'Http' && !mediaSource.RequiredHttpHeaders.length) {
+        if (mediaSource.SupportsDirectPlay) {
 
-            // If this is the only way it can be played, then allow it
-            if (!mediaSource.SupportsDirectStream && !mediaSource.SupportsTranscoding) {
-                return true;
-            }
-            else if (mediaSource.SupportsDirectPlay) {
-                return isHostReachable(mediaSource, serverAddress);
-            } else {
+            if (mediaSource.IsRemote && (itemType === 'TvChannel' || itemType === 'Trailer')) {
                 return false;
             }
+
+            if (mediaSource.Protocol === 'Http' && !mediaSource.RequiredHttpHeaders.length) {
+
+                // If this is the only way it can be played, then allow it
+                if (!mediaSource.SupportsDirectStream && !mediaSource.SupportsTranscoding) {
+                    return true;
+                }
+                else if (mediaSource.SupportsDirectPlay) {
+                    return isHostReachable(mediaSource, serverAddress);
+                }
+            }
         }
+
+        return false;
     }
 
     function setTextTrack($scope, subtitleStreamUrl) {
