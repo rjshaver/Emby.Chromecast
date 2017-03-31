@@ -663,7 +663,6 @@
             2;
 
         var profile = deviceProfileBuilder({
-            supportsCustomSeeking: true,
             audioChannels: transcodingAudioChannels
         });
 
@@ -701,7 +700,7 @@
 
                 if (validatePlaybackInfoResult(result)) {
 
-                    var mediaSource = getOptimalMediaSource(item.MediaType, result.MediaSources);
+                    var mediaSource = getOptimalMediaSource(item.MediaType, result.MediaSources, item.serverAddress);
 
                     if (mediaSource) {
 
@@ -709,7 +708,7 @@
 
                             embyActions.getLiveStream(item, result.PlaySessionId, maxBitrate, deviceProfile, options.startPositionTicks, mediaSource, null, null).then(function (openLiveStreamResult) {
 
-                                openLiveStreamResult.MediaSource.enableDirectPlay = supportsDirectPlay(openLiveStreamResult.MediaSource);
+                                openLiveStreamResult.MediaSource.enableDirectPlay = supportsDirectPlay(openLiveStreamResult.MediaSource, item.serverAddress);
                                 playMediaSource(result.PlaySessionId, item, openLiveStreamResult.MediaSource, options);
                             });
 
@@ -789,11 +788,11 @@
         });
     }
 
-    function getOptimalMediaSource(mediaType, versions) {
+    function getOptimalMediaSource(mediaType, versions, serverAddress) {
 
         var optimalVersion = versions.filter(function (v) {
 
-            v.enableDirectPlay = supportsDirectPlay(v);
+            v.enableDirectPlay = supportsDirectPlay(v, serverAddress);
 
             return v.enableDirectPlay;
 
@@ -812,15 +811,38 @@
         })[0];
     }
 
-    function supportsDirectPlay(mediaSource) {
+    function isHostReachable(mediaSource, serverAddress) {
 
-        if (mediaSource.SupportsDirectPlay && mediaSource.Protocol == 'Http' && !mediaSource.RequiredHttpHeaders.length) {
+        var url = mediaSource.Path;
 
-            // TODO: Need to verify the host is going to be reachable
+        var isServerAddress = url.toLowerCase().replace('https:', 'http').indexOf(serverAddress.toLowerCase().replace('https:', 'http').substring(0, 14)) === 0;
+
+        if (isServerAddress) {
             return true;
         }
 
+        if (mediaSource.IsRemote) {
+            // We can't enable this by default until we have automatic failure fallover to transcoding
+            //return true;
+        }
+
         return false;
+    }
+
+    function supportsDirectPlay(mediaSource, serverAddress) {
+
+        if (mediaSource.Protocol === 'Http' && !mediaSource.RequiredHttpHeaders.length) {
+
+            // If this is the only way it can be played, then allow it
+            if (!mediaSource.SupportsDirectStream && !mediaSource.SupportsTranscoding) {
+                return true;
+            }
+            else if (mediaSource.SupportsDirectPlay) {
+                return isHostReachable(mediaSource, serverAddress);
+            } else {
+                return false;
+            }
+        }
     }
 
     function setTextTrack($scope, subtitleStreamUrl) {
